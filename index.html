@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Byte to Bite</title>
+  <style>
+    *{box-sizing:border-box} body{margin:0;overflow:hidden;background:#08111d;color:#f5fbff;font:15px/1.35 system-ui,sans-serif} canvas{display:block}
+    #hud{position:fixed;inset:0;pointer-events:none;padding:18px;text-shadow:0 2px 3px #000} #top{display:flex;gap:12px} .card{background:#07111bd9;border:1px solid #5bc4dc99;border-radius:9px;padding:8px 12px;min-width:105px} #carry{position:absolute;left:18px;bottom:55px;max-width:470px} #prompt{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);background:#10283ee8;border:1px solid #78e5ff;border-radius:99px;padding:10px 19px;white-space:nowrap} .muted{color:#b8d2dd}
+    #results{display:none;pointer-events:auto;position:fixed;inset:0;background:#030a11df;place-items:center} #results.show{display:grid}.panel{width:min(460px,92vw);background:#102235;border:1px solid #75dff9;border-radius:14px;padding:24px;box-shadow:0 10px 45px #000}.panel h1{margin:0 0 8px}.total{font-size:32px;color:#9af5b1;font-weight:800} #breakdown{max-height:300px;overflow:auto;margin:14px 0;color:#d8ebf4}button{background:#7ae6ff;color:#062031;border:0;border-radius:8px;padding:10px 15px;font-weight:800;font-size:15px;cursor:pointer}
+  #uname{background:#07111b;color:#f5fbff;border:1px solid #75dff9;border-radius:8px;padding:9px 11px;font-size:15px;width:150px}#lb{margin:0;padding-left:22px;max-height:170px;overflow:auto}
+  </style>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+  <div id="hud"><div id="top"><div class="card">SCORE<br><b id="score">0</b></div><div class="card">TIME<br><b id="timer">2:00</b></div></div><div id="carry" class="card">Loading field…</div><div id="prompt"></div></div>
+  <div id="results"><div class="panel"><h1>Match Complete</h1><div class="total" id="finalScore">0 points</div><div id="breakdown"></div><div id="lbsubmit"><input id="uname" maxlength="16" placeholder="Username" autocomplete="off"> <button id="post">Submit score</button> <span id="lbmsg" class="muted"></span></div><h3 style="margin:14px 0 6px">Leaderboard</h3><ol id="lb" class="muted"></ol><button id="again">Play Again</button></div></div>
+  <script>window.SUPABASE_URL="https://kmmewllzswkrofjhzzkj.supabase.co";window.SUPABASE_KEY="sb_publishable_j0pq1smgxPTmDL6C9g01Vw_RpFpdIsZ";</script>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
