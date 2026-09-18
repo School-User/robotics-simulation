@@ -1,0 +1,140 @@
+{
+  "node": "FieldStructure",
+  "meshIndex": 11,
+  "worldMatrix": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+  ],
+  "filter": "Overlaps X=1..5/Z=5..10; horizontal thickness <=0.5; height >=0.75; Y within -infinity..2.5 with base <=0.5",
+  "primitives": [
+    {
+      "primitive": 0,
+      "positionAccessor": 36,
+      "materialIndex": 11,
+      "materialName": "WoodMat",
+      "local": {
+        "min": [
+          -0.9166666269302368,
+          -3.937007875265408e-8,
+          -0.4999999701976776
+        ],
+        "max": [
+          11.812500953674316,
+          2.3333332538604736,
+          11.8125
+        ]
+      },
+      "world": {
+        "min": [
+          -0.9166666269302368,
+          -3.937007875265408e-8,
+          -0.4999999701976776
+        ],
+        "max": [
+          11.812500953674316,
+          2.3333332538604736,
+          11.8125
+        ],
+        "size": [
+          12.729167580604553,
+          2.3333332932305524,
+          12.312499970197678
+        ]
+      },
+      "overlapsRegion": true,
+      "wallLike": false,
+      "candidate": false
+    },
+    {
+      "primitive": 1,
+      "positionAccessor": 40,
+      "materialIndex": 12,
+      "materialName": "CloseWall_XMat",
+      "local": {
+        "min": [
+          -1.375,
+          0,
+          -1.3100004196166992
+        ],
+        "max": [
+          -1.2249999046325684,
+          1.5,
+          11.789999961853027
+        ]
+      },
+      "world": {
+        "min": [
+          -1.375,
+          0,
+          -1.3100004196166992
+        ],
+        "max": [
+          -1.2249999046325684,
+          1.5,
+          11.789999961853027
+        ],
+        "size": [
+          0.15000009536743164,
+          1.5,
+          13.100000381469727
+        ]
+      },
+      "overlapsRegion": false,
+      "wallLike": true,
+      "candidate": false
+    },
+    {
+      "primitive": 2,
+      "positionAccessor": 44,
+      "materialIndex": 13,
+      "materialName": "CloseWall_YMat",
+      "local": {
+        "min": [
+          -1.3100004196166992,
+          0,
+          -1.375
+        ],
+        "max": [
+          11.789999961853027,
+          1.5,
+          -1.2249999046325684
+        ]
+      },
+      "world": {
+        "min": [
+          -1.3100004196166992,
+          0,
+          -1.375
+        ],
+        "max": [
+          11.789999961853027,
+          1.5,
+          -1.2249999046325684
+        ],
+        "size": [
+          13.100000381469727,
+          1.5,
+          0.15000009536743164
+        ]
+      },
+      "overlapsRegion": false,
+      "wallLike": true,
+      "candidate": false
+    }
+  ],
+  "candidates": []
+}
