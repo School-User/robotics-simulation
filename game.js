@@ -42,121 +42,14 @@ function setup(){
   if(robotVisual){ robot.attach(robotVisual); if(arm && arm.parent!==robotVisual) robot.attach(arm); }
   else { const m=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:0xff4545}));robot.add(m); }
   buildCollisionMap();
-  for(const b of collisionBoxes) scene.add(new THREE.Box3Helper(b, 0xff0000));
-  const dbg=document.createElement('pre');dbg.style.cssText='position:fixed;top:0;left:0;background:#000;color:#0f0;font-size:11px;z-index:999;padding:4px;margin:0;max-width:100%;white-space:pre-wrap;';
-  dbg.textContent='collisionBoxes: '+collisionBoxes.length+'\n'+collisionBoxes.map(b=>`min=${b.min.toArray().map(v=>v.toFixed(2))} max=${b.max.toArray().map(v=>v.toFixed(2))}`).join('\n');
-  document.body.appendChild(dbg);
   for(const n of ['QCA_Tile','WarmingShelf','BalanceBuffetShelf','Table_0','Table_1','Table_2','Table_3']){
     if(named[n])named[n].userData.interactionBounds=new THREE.Box3().setFromObject(named[n]);
   }
   marker=new THREE.Mesh(new THREE.TorusGeometry(.35,.025,8,24),new THREE.MeshBasicMaterial({color:0x00eaff})); marker.rotation.x=Math.PI/2; marker.visible=false;scene.add(marker);
   resetState(); ready=true;
 }
-let debugGLTFParser;
-loader.load('./field.glb',g=>{debugGLTFParser=g.parser;scene.add(g.scene);setup()},undefined,e=>{ $('carry').textContent='Could not load field.glb — run a local web server.'; console.error(e); });
+loader.load('./field.glb',g=>{scene.add(g.scene);setup()},undefined,e=>{ $('carry').textContent='Could not load field.glb — run a local web server.'; console.error(e); });
 
-// Temporary click-to-identify debugger; raycasting happens only on clicks.
-const debugRaycaster=new THREE.Raycaster(), debugPointer=new THREE.Vector2();
-const debugIslandGraphs=new WeakMap(), DEBUG_WELD_EPSILON=1e-5;
-function debugTriangleIsland(mesh,faceIndex){
-  const geometry=mesh.geometry, positions=geometry?.getAttribute('position');
-  if(!positions||faceIndex==null)return null;
-  const index=geometry.index, count=index?index.count:positions.count;
-  // Keep grouped geometry within the actual primitive/material range clicked.
-  const group=geometry.groups.find(g=>faceIndex*3>=g.start&&faceIndex*3<g.start+g.count);
-  const start=group?group.start:0, end=group?Math.min(count,group.start+group.count):count;
-  const first=start/3, triangleCount=Math.floor((end-start)/3), seed=faceIndex-first;
-  if(!Number.isInteger(seed)||seed<0||seed>=triangleCount)return null;
-  let graphs=debugIslandGraphs.get(geometry);
-  if(!graphs){graphs=new Map();debugIslandGraphs.set(geometry,graphs);}
-  const key=`${start}:${end}`;
-  let graph=graphs.get(key);
-  if(!graph){
-    const vertexAt=i=>index?index.getX(i):i;
-    const parents=new Map(), buckets=new Map(), epsilon=DEBUG_WELD_EPSILON;
-    const root=v=>{let r=v;while(parents.get(r)!==r)r=parents.get(r);while(v!==r){const next=parents.get(v);parents.set(v,r);v=next;}return r;};
-    // Weld duplicate vertices across normal/UV seams. Check neighboring cells
-    // and actual distances so points on opposite cell boundaries still join.
-    for(let i=start;i<end;i++){
-      const v=vertexAt(i);if(parents.has(v))continue;
-      parents.set(v,v);
-      const x=positions.getX(v),y=positions.getY(v),z=positions.getZ(v);
-      const bx=Math.floor(x/epsilon),by=Math.floor(y/epsilon),bz=Math.floor(z/epsilon);
-      for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)for(let dz=-1;dz<=1;dz++){
-        for(const other of buckets.get(`${bx+dx},${by+dy},${bz+dz}`)||[]){
-          if((x-positions.getX(other))**2+(y-positions.getY(other))**2+(z-positions.getZ(other))**2<=epsilon**2)parents.set(root(v),root(other));
-        }
-      }
-      const cell=`${bx},${by},${bz}`;
-      if(!buckets.has(cell))buckets.set(cell,[]);
-      buckets.get(cell).push(v);
-    }
-    const triangles=[], incident=new Map();
-    for(let t=0;t<triangleCount;t++){
-      const vertices=[0,1,2].map(c=>root(vertexAt(start+t*3+c)));
-      triangles.push(vertices);
-      for(const v of new Set(vertices)){
-        if(!incident.has(v))incident.set(v,[]);
-        incident.get(v).push(t);
-      }
-    }
-    // Vertex-to-triangle incidence is an adjacency graph without quadratic
-    // neighbor lists at high-valence vertices. Cache it for later clicks.
-    graph={triangles,incident,vertexAt};graphs.set(key,graph);
-  }
-  const pending=[seed], seen=new Set(pending), visitedVertices=new Set();
-  const bounds=new THREE.Box3(), point=new THREE.Vector3();
-  mesh.updateWorldMatrix(true,false);
-  for(let i=0;i<pending.length;i++){
-    const triangle=pending[i];
-    // Bound the original vertices, not welded representatives, in world space.
-    for(let corner=0;corner<3;corner++){
-      point.fromBufferAttribute(positions,graph.vertexAt(start+triangle*3+corner)).applyMatrix4(mesh.matrixWorld);
-      bounds.expandByPoint(point);
-    }
-    for(const vertex of graph.triangles[triangle]){
-      if(visitedVertices.has(vertex))continue;
-      visitedVertices.add(vertex);
-      for(const neighbor of graph.incident.get(vertex))if(!seen.has(neighbor)){seen.add(neighbor);pending.push(neighbor);}
-    }
-  }
-  return {bounds,triangles:seen.size,total:triangleCount};
-}
-renderer.domElement.addEventListener('click',event=>{
-  const rect=renderer.domElement.getBoundingClientRect();
-  debugPointer.set((event.clientX-rect.left)/rect.width*2-1,1-(event.clientY-rect.top)/rect.height*2);
-  scene.updateMatrixWorld(true);camera.updateWorldMatrix(true,false);
-  debugRaycaster.setFromCamera(debugPointer,camera);
-  const hit=debugRaycaster.intersectObjects(scene.children,true).find(hit=>{
-    // Ignore hidden objects and debug overlays so they cannot obscure the prop.
-    for(let o=hit.object;o;o=o.parent)if(!o.visible||o.type==='Box3Helper'||o===marker)return false;
-    return true;
-  });
-  let dbg=$('dbgclick');
-  if(!dbg){
-    dbg=document.createElement('pre');dbg.id='dbgclick';
-    dbg.style.cssText='position:fixed;top:110px;left:0;background:#000;color:#0f0;font-size:12px;z-index:999;padding:4px;margin:0;max-width:100%;max-height:30vh;overflow:auto;white-space:pre-wrap;pointer-events:none;';
-    document.body.appendChild(dbg);
-  }
-  if(!hit){dbg.textContent+='Click: no hit\n';return;}
-  let object=hit.object;
-  while(!object.name&&object.parent&&object.parent!==scene)object=object.parent;
-  const bounds=new THREE.Box3().setFromObject(object);
-  const format=v=>v.toArray().map(n=>n.toFixed(3)).join(', ');
-  const mesh=hit.object, materialIndex=hit.face?.materialIndex??0;
-  const material=Array.isArray(mesh.material)?mesh.material[materialIndex]:mesh.material;
-  // GLTFLoader associations retain raw glTF mesh/primitive indices, even if
-  // child meshes have generated names. Fall back to the child slot if absent.
-  const association=debugGLTFParser?.associations.get(mesh);
-  const childIndex=mesh.parent?mesh.parent.children.indexOf(mesh):-1;
-  const primitive=association?.primitives??childIndex;
-  dbg.textContent+=`Click: ${object.name||'(unnamed '+object.type+')'}\nparent: ${mesh.parent?.name||'(unnamed)'}  primitive: ${primitive} (${association?.primitives!=null?'glTF':'child slot'})\nmaterial group: ${materialIndex}  material: ${material?.name||'(unnamed)'}  face: ${hit.faceIndex??'n/a'}\npoint (x,y,z): ${format(hit.point)}\nobject min: ${format(bounds.min)}  max: ${format(bounds.max)}\n`;
-  if(material?.name==='WoodMat'){
-    const island=debugTriangleIsland(mesh,hit.faceIndex);
-    if(island)dbg.textContent+=`island: ${island.triangles}/${island.total} triangles (weld epsilon ${DEBUG_WELD_EPSILON})\nisland min: ${format(island.bounds.min)}  max: ${format(island.bounds.max)}\n`;
-  }
-  dbg.scrollTop=dbg.scrollHeight;
-});
 
 function mealType(){ if(!state.plate)return null; const a=state.plate.items, set=new Set(a), first=a[0], last=a.at(-1), non=new Set(a.filter(x=>x!=='grain'));
   if(first==='grain'&&last==='grain'&&non.size>=4)return 'sandwich';
@@ -223,7 +116,7 @@ function clearAnimations(){for(const v of carriedVisuals)scene.remove(v.mesh);ca
 function checkBonuses(){const groups=[['Veg tray emptied',4,/^Veg_/],['Fruit frame emptied',4,/^Fruit_/],['Fridge emptied',8,/^(Dairy|Protein)_/],['Breadbox emptied',8,/^Grain_/]];for(const [why,p,re] of groups)if(!state.bonuses.has(why)){const all=Object.keys(named).filter(n=>re.test(n));if(all.length&&all.every(n=>state.taken.has(n))){state.bonuses.add(why);addScore(p,why);}}}
 function scorePrompt(type,drink,zone){if(type)return `Press E to score ${label(type)}${drink?' + drink':''} on ${zone}`;return `Press E to score filled drink on ${zone}`;}
 function scoreAt(type,drink,zone,destination){animateDelivery(type,drink,destination);let points=0;if(type){points=zone==='QCA'?{salad:5,pizza:15,sandwich:25}[type]:mealBase[type]+(zone==='Warming Shelf'?5:zone==='Balance Buffet'?15:zone==='Dining Table'?50:0);if(drink)points+=zone==='QCA'?6:12;addScore(points,`${label(type)}${drink?' + drink':''} — ${zone}`);state.plate=null;if(drink)state.cup=null;}else if(drink){points=zone==='QCA'?2:4;addScore(points,`Filled drink — ${zone}`);state.cup=null;}}
-function endMatch(){if(state.ended)return;state.ended=true;const type=mealType(),drink=state.cup?.water>0;if(type||drink)animateDelivery(type,drink);if(type){let p=mealBase[type]+(drink?12:0);addScore(p,`${label(type)}${drink?' + drink':''} — carried at match end`);}else if(drink)addScore(4,'Filled drink — carried at match end');$('finalScore').textContent=`${state.score} points`;$('breakdown').innerHTML=state.breakdown.map(x=>`<div>${x.why}<span style="float:right">+${x.points}</span></div>`).join('')||'<div>No points scored.</div>';$('results').classList.add('show');}
+function endMatch(){if(state.ended)return;state.ended=true;const type=mealType(),drink=state.cup?.water>0;if(type||drink)animateDelivery(type,drink);if(type){let p=mealBase[type]+(drink?12:0);addScore(p,`${label(type)}${drink?' + drink':''} — carried at match end`);}else if(drink)addScore(4,'Filled drink — carried at match end');$('finalScore').textContent=`${state.score} points`;$('breakdown').innerHTML=state.breakdown.map(x=>`<div>${x.why}<span style="float:right">+${x.points}</span></div>`).join('')||'<div>No points scored.</div>';$('results').classList.add('show');lbOpen();}
 function buildCollisionMap(){
   const floor=named.Floor;if(!floor)return;
   const box=new THREE.Box3().setFromObject(floor); floorBounds={minX:box.min.x+.6,maxX:box.max.x-.6,minZ:box.min.z+.6,maxZ:box.max.z-.6};
@@ -234,7 +127,10 @@ function buildCollisionMap(){
   const segments=[[-.271,3.5,5.5,5.803],[5.5,5.803,0,5.803],
     [-1.375,-1.225,-1.31,11.79],[-1.31,11.79,-1.375,-1.225],
     // Panel identified by a live click + connected-triangle flood-fill.
-    [-0.031,0.031,6.344,9.010]];
+    [-0.031,0.031,6.344,9.010],
+    // The model only has closing walls on the -X and -Z sides; mirror them onto
+    // the open +X / +Z edges (just outside the wood floor) so the robot cannot drive off the field.
+    [11.81,11.96,-1.31,11.96],[-1.31,11.96,11.81,11.96]];
   collisionBoxes.length=0;
   collisionStepLimit=.1;
   if(fieldStructure){
@@ -279,16 +175,14 @@ function restart(){
   $('score').textContent='0';$('results').classList.remove('show');hud();
 }
 function hud(c){const total=Math.ceil(state.time);$('timer').textContent=`${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`; const plate=state.plate?state.plate.items.map(label).join(' → ')||'empty':'none';const cup=state.cup?(state.cup.water?`filled (${state.cup.water})`:'empty'):'none';$('carry').innerHTML=`<b>PLATE:</b> ${plate}<br><b>CUP:</b> ${cup}<br><span class="muted">WASD / arrows drive · E interact · R restart</span>`;$('prompt').textContent=c?.text||'';marker.visible=!!c;if(c)marker.position.copy(pos(c.o)).add(new THREE.Vector3(0,.18,0));}
-addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(e.repeat)return;keys[e.code]=true;if(e.code==='KeyR')restart();if(e.code==='KeyE'&&ready&&!state.ended){const c=objectCandidates()[0];if(c)c.fn();}});
-addEventListener('keyup',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();keys[e.code]=false;});addEventListener('blur',()=>{keys={};driveSpeed=0;});$('again').onclick=restart;
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(e.repeat)return;keys[e.code]=true;if(e.code==='KeyR')restart();if(e.code==='KeyE'&&ready&&!state.ended){const c=objectCandidates()[0];if(c)c.fn();}});
+addEventListener('keyup',e=>{if(e.target.tagName==='INPUT')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();keys[e.code]=false;});addEventListener('blur',()=>{keys={};driveSpeed=0;});$('again').onclick=restart;
 function tick(){requestAnimationFrame(tick);const dt=Math.min(clock.getDelta(),.05);if(ready&&!state.ended){
   const turn=(keys.KeyA||keys.ArrowLeft?1:0)-(keys.KeyD||keys.ArrowRight?1:0);robot.rotation.y+=turn*3*dt;
   const input=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0), target=input>0?4.5:input<0?-3:0;
   driveSpeed=THREE.MathUtils.damp(driveSpeed,target,input?16:20,dt);if(Math.abs(driveSpeed)<.01)driveSpeed=0;moveRobot(driveSpeed*dt);
   state.time=Math.max(0,state.time-dt);const c=objectCandidates()[0];hud(c);if(state.time===0)endMatch();
 }if(robot){
-  const dbg=document.getElementById('dbgpos')||(()=>{const e=document.createElement('pre');e.id='dbgpos';e.style.cssText='position:fixed;top:0;right:0;background:#000;color:#0f0;font-size:13px;z-index:999;padding:4px;margin:0;';document.body.appendChild(e);return e;})();
-  dbg.textContent=`pos x=${robot.position.x.toFixed(2)} z=${robot.position.z.toFixed(2)}  blocked=${blocked(robot.position.x,robot.position.z)}  y=${robot.position.y.toFixed(2)}`;
   updateAnimations(dt);const look=robot.position.clone().add(new THREE.Vector3(0,.35,0)), desired=robot.position.clone().add(cameraOffset.clone().applyAxisAngle(up,robot.rotation.y));
   camera.position.lerp(desired,1-Math.exp(-8*dt));camera.lookAt(look);
 }renderer.render(scene,camera);} tick();
@@ -319,3 +213,9 @@ addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updat
   }
   connect();
 })();
+
+// Leaderboard on Supabase (REST). Score is client-reported, so it is honor-system.
+const sb=(p,o={})=>fetch(SUPABASE_URL+'/rest/v1/'+p,{...o,headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY,'Content-Type':'application/json',Prefer:'return=minimal'}});
+async function lbLoad(){try{const rows=await(await sb('leaderboard?select=name,score&order=score.desc&limit=20')).json();$('lb').innerHTML=rows.map(x=>`<li>${x.name.replace(/[<&]/g,'')}<span style="float:right">${x.score}</span></li>`).join('')||'<li>No scores yet</li>';}catch{$('lb').innerHTML='<li>Leaderboard offline</li>';}}
+function lbOpen(){try{$('uname').value=localStorage.getItem('uname')||'';}catch{}$('lbmsg').textContent='';$('post').disabled=false;lbLoad();}
+$('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbmsg').textContent='Enter a username';return;}try{localStorage.setItem('uname',name);}catch{}$('post').disabled=true;try{const r=await sb('scores',{method:'POST',body:JSON.stringify({name,score:state.score})});$('lbmsg').textContent=r.ok?'Submitted!':'Rejected (bad name or score)';if(!r.ok)$('post').disabled=false;}catch{$('lbmsg').textContent='Could not reach leaderboard';$('post').disabled=false;}lbLoad();};
