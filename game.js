@@ -283,7 +283,82 @@ function drawMinimap() {
     minimapCtx.canvas.style.display = 'block';
   }
 }
-function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();const dt=Math.min(clock.getDelta(),.05);if(ready&&!state.ended){
+let gpPrevA = false, gpPrevB = false, gpPrevStart = false, gpWasActive = false;
+
+function pollGamepad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = pads.find(p => p && p.connected);
+  
+  if (!gp) {
+    if (gpWasActive) {
+      keys.KeyW = false;
+      keys.KeyS = false;
+      keys.KeyA = false;
+      keys.KeyD = false;
+      gpWasActive = false;
+    }
+    return;
+  }
+
+  const axes = gp.axes;
+  const buttons = gp.buttons;
+  
+  // Safe access helpers
+  const btn = i => !!(buttons[i] && buttons[i].pressed);
+  const ax = i => axes[i] || 0;
+  
+  // Drive controls
+  let forward = ax(1) < -0.25 || btn(12);
+  let backward = ax(1) > 0.25 || btn(13);
+  let left = ax(0) < -0.25 || ax(2) < -0.25 || btn(14);
+  let right = ax(0) > 0.25 || ax(2) > 0.25 || btn(15);
+  
+  // Determine if any direction is active
+  const active = forward || backward || left || right;
+  
+  // Set keys based on active state and previous state
+  if (active) {
+    gpWasActive = true;
+    keys.KeyW = forward;
+    keys.KeyS = backward;
+    keys.KeyA = left;
+    keys.KeyD = right;
+  } else if (gpWasActive) {
+    // Clear all keys when gamepad is inactive but was active previously
+    keys.KeyW = false;
+    keys.KeyS = false;
+    keys.KeyA = false;
+    keys.KeyD = false;
+    gpWasActive = false;
+  }
+  
+  // Button controls
+  const aPressed = btn(0);
+  const bPressed = btn(1);
+  const startPressed = btn(9);
+  
+  // A button - interact
+  if (aPressed && !gpPrevA && ready && !state.ended) {
+    const c = objectCandidates()[0];
+    if (c) {
+      if (typeof act === 'function') {
+        act(c);
+      } else {
+        c.fn();
+      }
+    }
+  }
+  
+  // B or Start button - restart
+  if ((bPressed && !gpPrevB) || (startPressed && !gpPrevStart)) {
+    restart();
+  }
+  
+  gpPrevA = aPressed;
+  gpPrevB = bPressed;
+  gpPrevStart = startPressed;
+}
+function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();pollGamepad();const dt=Math.min(clock.getDelta(),.05);if(ready&&!state.ended){
   const turn=(keys.KeyA||keys.ArrowLeft?1:0)-(keys.KeyD||keys.ArrowRight?1:0);robot.rotation.y+=turn*3*dt;
   const input=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0), target=input>0?4.5:input<0?-3:0;
   driveSpeed=THREE.MathUtils.damp(driveSpeed,target,input?16:20,dt);if(Math.abs(driveSpeed)<.01)driveSpeed=0;moveRobot(driveSpeed*dt);
