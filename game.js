@@ -177,7 +177,113 @@ function restart(){
 function hud(c){const total=Math.ceil(state.time);$('timer').textContent=`${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`; const plate=state.plate?state.plate.items.map(label).join(' → ')||'empty':'none';const cup=state.cup?(state.cup.water?`filled (${state.cup.water})`:'empty'):'none';$('carry').innerHTML=`<b>PLATE:</b> ${plate}<br><b>CUP:</b> ${cup}<br><span class="muted">WASD / arrows drive · E interact · R restart</span>`;$('prompt').textContent=c?.text||'';marker.visible=!!c;if(c)marker.position.copy(pos(c.o)).add(new THREE.Vector3(0,.18,0));}
 addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(e.repeat)return;keys[e.code]=true;if(e.code==='KeyR')restart();if(e.code==='KeyE'&&ready&&!state.ended){const c=objectCandidates()[0];if(c)c.fn();}});
 addEventListener('keyup',e=>{if(e.target.tagName==='INPUT')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();keys[e.code]=false;});addEventListener('blur',()=>{keys={};driveSpeed=0;});$('again').onclick=restart;
-function tick(){requestAnimationFrame(tick);const dt=Math.min(clock.getDelta(),.05);if(ready&&!state.ended){
+let minimapCtx;
+
+function drawMinimap() {
+  if (!minimapCtx) {
+    const canvas = document.createElement('canvas');
+    canvas.id = 'minimap';
+    canvas.width = 180;
+    canvas.height = 180;
+    canvas.style.position = 'fixed';
+    canvas.style.right = '14px';
+    canvas.style.top = '50%';
+    canvas.style.transform = 'translateY(-50%)';
+    canvas.style.border = '2px solid #5bc4dc99';
+    canvas.style.borderRadius = '10px';
+    canvas.style.background = '#07111bd9';
+    canvas.style.pointerEvents = 'none';
+    document.body.appendChild(canvas);
+    minimapCtx = canvas.getContext('2d');
+  }
+
+  if (!floorBounds) return;
+
+  const margin = 8;
+  const canvasWidth = minimapCtx.canvas.width;
+  const canvasHeight = minimapCtx.canvas.height;
+  
+  // Calculate world bounds with 1 unit padding
+  const paddedMinX = floorBounds.minX - 1;
+  const paddedMaxX = floorBounds.maxX + 1;
+  const paddedMinZ = floorBounds.minZ - 1;
+  const paddedMaxZ = floorBounds.maxZ + 1;
+  
+  // Calculate scale and offset to fit the world in canvas with margin
+  const worldWidth = paddedMaxX - paddedMinX;
+  const worldHeight = paddedMaxZ - paddedMinZ;
+  const scale = Math.min(
+    (canvasWidth - 2 * margin) / worldWidth,
+    (canvasHeight - 2 * margin) / worldHeight
+  );
+  
+  const offsetX = margin - paddedMinX * scale;
+  const offsetY = margin - paddedMinZ * scale;
+
+  // Clear canvas
+  minimapCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+  // Fill floor rectangle
+  minimapCtx.fillStyle = '#1d3a2a';
+  minimapCtx.fillRect(
+    offsetX,
+    offsetY,
+    worldWidth * scale,
+    worldHeight * scale
+  );
+
+  // Draw collision boxes
+  minimapCtx.fillStyle = '#d0d8e0';
+  for (const box of collisionBoxes) {
+    const x = box.min.x * scale + offsetX;
+    const z = box.min.z * scale + offsetY;
+    const width = (box.max.x - box.min.x) * scale;
+    const height = (box.max.z - box.min.z) * scale;
+    minimapCtx.fillRect(x, z, width, height);
+  }
+
+  // Draw others
+  minimapCtx.fillStyle = 'orange';
+  for (const obj of (typeof others === 'undefined' ? [] : others)) {
+    const x = obj.position.x * scale + offsetX;
+    const z = obj.position.z * scale + offsetY;
+    minimapCtx.beginPath();
+    minimapCtx.arc(x, z, 3, 0, Math.PI * 2);
+    minimapCtx.fill();
+  }
+
+  // Draw robot
+  minimapCtx.fillStyle = 'cyan';
+  const robotX = robot.position.x * scale + offsetX;
+  const robotZ = robot.position.z * scale + offsetY;
+  const directionX = -Math.sin(robot.rotation.y);
+  const directionZ = -Math.cos(robot.rotation.y);
+  
+  // Create triangle pointing in robot's facing direction
+  const length = 8;
+  const tipX = robotX + directionX * length;
+  const tipZ = robotZ + directionZ * length;
+  const angle = Math.atan2(directionZ, directionX);
+  const leftX = robotX + Math.cos(angle + Math.PI/2) * length/2;
+  const leftZ = robotZ + Math.sin(angle + Math.PI/2) * length/2;
+  const rightX = robotX + Math.cos(angle - Math.PI/2) * length/2;
+  const rightZ = robotZ + Math.sin(angle - Math.PI/2) * length/2;
+  
+  minimapCtx.beginPath();
+  minimapCtx.moveTo(tipX, tipZ);
+  minimapCtx.lineTo(leftX, leftZ);
+  minimapCtx.lineTo(rightX, rightZ);
+  minimapCtx.closePath();
+  minimapCtx.fill();
+
+  // Show/hide canvas based on state
+  if (state && state.ended) {
+    minimapCtx.canvas.style.display = 'none';
+  } else {
+    minimapCtx.canvas.style.display = 'block';
+  }
+}
+function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();const dt=Math.min(clock.getDelta(),.05);if(ready&&!state.ended){
   const turn=(keys.KeyA||keys.ArrowLeft?1:0)-(keys.KeyD||keys.ArrowRight?1:0);robot.rotation.y+=turn*3*dt;
   const input=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0), target=input>0?4.5:input<0?-3:0;
   driveSpeed=THREE.MathUtils.damp(driveSpeed,target,input?16:20,dt);if(Math.abs(driveSpeed)<.01)driveSpeed=0;moveRobot(driveSpeed*dt);
