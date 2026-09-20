@@ -145,7 +145,6 @@ function buildCollisionMap(){
   }
 }
 function blocked(x,z){
-  for(const o of others){const d=Math.hypot(x-o.position.x,z-o.position.z);if(d<1.1&&d<Math.hypot(robot.position.x-o.position.x,robot.position.z-o.position.z))return true;}
   for(const b of collisionBoxes)if(x>=b.min.x-ROBOT_RADIUS&&x<=b.max.x+ROBOT_RADIUS&&z>=b.min.z-ROBOT_RADIUS&&z<=b.max.z+ROBOT_RADIUS)return true;
   return false;
 }
@@ -167,12 +166,7 @@ function moveRobot(distance){
     if(!blocked(robot.position.x,motionDesired.z))robot.position.z=motionDesired.z;
   }
 }
-const others=[]; let mp=null, busy=false;
-const CLAIM=/^(Plate|Cup|Veg|Fruit|Dairy|Protein|Grain|Water|Table)_\d+$/;
-// Shared items (pickups, ingredients, dining tables) need the server's OK first: first claim wins.
-async function act(c){if(busy)return;if(!mp||!CLAIM.test(c.o.name)){c.fn();return;}busy=true;try{if(await mp.claim(c.o.name)&&!state.ended)c.fn();}finally{busy=false;}}
-function restart(){if(mp){if(state.ended)mp.send({t:'reset'});}else doRestart();}
-function doRestart(){
+function restart(){
   if(!ready)return;
   state.taken.forEach(n=>{const o=named[n];if(o){o.visible=true;o.userData.hidden=false;}});
   for(let i=0;i<3;i++){const stem=named[`PlateStem_${i}`];if(stem){stem.visible=true;stem.userData.hidden=false;}}
@@ -181,7 +175,7 @@ function doRestart(){
   $('score').textContent='0';$('results').classList.remove('show');hud();
 }
 function hud(c){const total=Math.ceil(state.time);$('timer').textContent=`${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`; const plate=state.plate?state.plate.items.map(label).join(' → ')||'empty':'none';const cup=state.cup?(state.cup.water?`filled (${state.cup.water})`:'empty'):'none';$('carry').innerHTML=`<b>PLATE:</b> ${plate}<br><b>CUP:</b> ${cup}<br><span class="muted">WASD / arrows drive · E interact · R restart</span>`;$('prompt').textContent=c?.text||'';marker.visible=!!c;if(c)marker.position.copy(pos(c.o)).add(new THREE.Vector3(0,.18,0));}
-addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(e.repeat)return;keys[e.code]=true;if(e.code==='KeyR')restart();if(e.code==='KeyE'&&ready&&!state.ended){const c=objectCandidates()[0];if(c)act(c);}});
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(e.repeat)return;keys[e.code]=true;if(e.code==='KeyR')restart();if(e.code==='KeyE'&&ready&&!state.ended){const c=objectCandidates()[0];if(c)c.fn();}});
 addEventListener('keyup',e=>{if(e.target.tagName==='INPUT')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();keys[e.code]=false;});addEventListener('blur',()=>{keys={};driveSpeed=0;});$('again').onclick=restart;
 let minimapCtx;
 
@@ -250,7 +244,7 @@ function drawMinimap() {
 
   // Draw others
   minimapCtx.fillStyle = 'orange';
-  for (const obj of others) {
+  for (const obj of (typeof others === 'undefined' ? [] : others)) {
     const x = obj.position.x * scale + offsetX;
     const z = obj.position.z * scale + offsetY;
     minimapCtx.beginPath();
@@ -316,7 +310,7 @@ addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updat
       if(s.rx>DEADZONE){keys.KeyD=true;keys.KeyA=false;}
       else if(s.rx<-DEADZONE){keys.KeyA=true;keys.KeyD=false;}
       else{keys.KeyA=false;keys.KeyD=false;}
-      if(s.a&&!prevA&&ready&&!state.ended){const c=objectCandidates()[0];if(c)act(c);}
+      if(s.a&&!prevA&&ready&&!state.ended){const c=objectCandidates()[0];if(c)c.fn();}
       if(s.b&&!prevB)restart();
       prevA=s.a;prevB=s.b;
     };
@@ -331,35 +325,3 @@ const sb=(p,o={})=>fetch(SUPABASE_URL+'/rest/v1/'+p,{...o,headers:{apikey:SUPABA
 async function lbLoad(){try{const rows=await(await sb('leaderboard?select=name,score&order=score.desc&limit=20')).json();$('lb').innerHTML=rows.map(x=>`<li>${x.name.replace(/[<&]/g,'')}<span style="float:right">${x.score}</span></li>`).join('')||'<li>No scores yet</li>';}catch{$('lb').innerHTML='<li>Leaderboard offline</li>';}}
 function lbOpen(){try{$('uname').value=localStorage.getItem('uname')||'';}catch{}$('lbmsg').textContent='';$('post').disabled=false;lbLoad();}
 $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbmsg').textContent='Enter a username';return;}try{localStorage.setItem('uname',name);}catch{}$('post').disabled=true;try{const r=await sb('scores',{method:'POST',body:JSON.stringify({name,score:state.score})});$('lbmsg').textContent=r.ok?'Submitted!':'Rejected (bad name or score)';if(!r.ok)$('post').disabled=false;}catch{$('lbmsg').textContent='Could not reach leaderboard';$('post').disabled=false;}lbLoad();};
-
-// Multiplayer client: WebSocket to server/server.mjs (?room=NAME, ?ws=ws://host:port to override).
-// Falls back to solo play if the server is unreachable.
-(function(){
-  const room=new URLSearchParams(location.search).get('room')||'lobby';
-  const url=new URLSearchParams(location.search).get('ws')||`ws://${location.hostname}:8080`;
-  const peers=new Map(), pending=new Map(), esc=s=>String(s).replace(/[<&]/g,'');
-  const name=()=>{try{return(localStorage.getItem('uname')||'').slice(0,16)||'Player';}catch{return'Player';}};
-  const list=document.createElement('div');list.className='card';list.style.cssText='position:absolute;top:18px;right:18px;min-width:150px;display:none';$('hud').append(list);
-  const applyTaken=n=>{if(!ready)return;if(n.startsWith('Table_'))state.tables.add(+n.slice(6));else{state.taken.add(n);hideObject(n);if(n.startsWith('Plate_'))hideObject(n.replace('Plate_','PlateStem_'));}};
-  const drop=k=>{const o=peers.get(k);if(o){scene.remove(o.mesh);others.splice(others.indexOf(o.mesh),1);peers.delete(k);}};
-  const ws=new WebSocket(`${url}/?room=${encodeURIComponent(room)}`);
-  ws.onopen=()=>{mp={send:o=>ws.readyState===1&&ws.send(JSON.stringify(o)),
-    claim:n=>new Promise(r=>{pending.set(n,r);mp.send({t:'claim',n});setTimeout(()=>pending.delete(n)&&r(false),1500);})};list.style.display='';};
-  ws.onclose=()=>{mp=null;list.style.display='none';[...peers.keys()].forEach(drop);for(const r of pending.values())r(false);pending.clear();};
-  ws.onmessage=async e=>{const m=JSON.parse(e.data);
-    if(m.t==='init'){while(!ready)await new Promise(r=>setTimeout(r,100));m.claims.forEach(applyTaken);state.time=Math.max(0,120-m.elapsed);}
-    else if(m.t==='p'){let o=peers.get(m.id);
-      if(!o){const hue=[...m.id].reduce((a,c)=>a+c.charCodeAt(0)*37,0)%360,mesh=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:new THREE.Color(`hsl(${hue},80%,55%)`)}));
-        mesh.position.set(m.x,robot.position.y,m.z);scene.add(mesh);others.push(mesh);o={mesh,hue};peers.set(m.id,o);}
-      Object.assign(o,{x:m.x,z:m.z,ry:m.ry,name:m.name,score:m.score,seen:performance.now()});}
-    else if(m.t==='left')drop(m.id);
-    else if(m.t==='taken')applyTaken(m.n);
-    else if(m.t==='start')doRestart();
-    else if(m.t==='ok'||m.t==='no'){const r=pending.get(m.n);pending.delete(m.n);r?.(m.t==='ok');}};
-  setInterval(()=>{if(ready&&mp)mp.send({t:'p',name:name(),x:robot.position.x,z:robot.position.z,ry:robot.rotation.y,score:state.score});},100);
-  (function loop(){requestAnimationFrame(loop);if(!mp)return;const now=performance.now();
-    for(const[k,o]of[...peers]){if(now-o.seen>3000){drop(k);continue;}
-      o.mesh.position.x+=(o.x-o.mesh.position.x)*.25;o.mesh.position.z+=(o.z-o.mesh.position.z)*.25;o.mesh.position.y=robot.position.y;o.mesh.rotation.y=o.ry;}
-    const rows=[{n:name()+' (you)',s:state?.score??0,c:'#7ae6ff'},...[...peers.values()].map(o=>({n:o.name,s:o.score,c:`hsl(${o.hue},80%,65%)`}))].sort((a,b)=>b.s-a.s);
-    list.innerHTML=`<span class="muted">ROOM ${esc(room)}</span>`+rows.map(r=>`<div style="color:${r.c}">${esc(r.n)}<span style="float:right">${r.s}</span></div>`).join('');})();
-})();
