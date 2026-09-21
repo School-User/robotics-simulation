@@ -10,6 +10,10 @@ const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 200);
 scene.add(new THREE.HemisphereLight(0xd9efff,0x334225,2.2)); const sun=new THREE.DirectionalLight(0xffffff,2.4);sun.position.set(8,14,5);sun.castShadow=true;scene.add(sun);
 Object.assign(sun.shadow.camera,{left:-20,right:20,top:20,bottom:-20});sun.shadow.camera.updateProjectionMatrix();sun.shadow.mapSize.set(2048,2048);sun.shadow.bias=-.0005;sun.shadow.normalBias=.03; // frustum covers the whole 4-quadrant field
 const AERIAL=new URLSearchParams(location.search).has('aerial'); // ?aerial = fixed top-down camera over the whole field
+// Start menu: single player = one quadrant, no server; multiplayer = full field + room server. ?mode=solo|multi (or ?room/?ws) skips the menu.
+let mode='solo';
+const modeChosen=new Promise(res=>{const pick=m=>{mode=m;$('menu').classList.remove('show');res();},P=new URLSearchParams(location.search),q=P.get('mode')||(P.has('room')||P.has('ws')?'multi':'');
+  if(q==='solo'||q==='multi')return pick(q);$('solo').onclick=()=>pick('solo');$('multi').onclick=()=>pick('multi');});
 const clock = new THREE.Clock(), loader = new GLTFLoader();
 let named={}, robot, robotVisual, marker, ready=false, keys={}, lastPrompt='', state;
 let floorBounds, fieldStructure, spawnRotation=0, driveSpeed=0;
@@ -30,7 +34,7 @@ function addScore(points, why){ if(!points)return; state.score+=points; state.br
 function hideObject(name){const o=named[name];if(o){o.visible=false; o.userData.hidden=true;}}
 function setup(){
   // The single-quadrant CAD has fake closing walls at x/z=-1.3; they'd cut through the middle of the full field.
-  scene.traverse(o=>{if(o.isMesh&&/^CloseWall/.test(o.material?.name||''))o.visible=false;});
+  if(mode==='multi')scene.traverse(o=>{if(o.isMesh&&/^CloseWall/.test(o.material?.name||''))o.visible=false;});
   scene.traverse(o=>{if(o.name) named[o.name]=o; if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
   fieldStructure=named.FieldStructure;
   if(fieldStructure) fieldStructure.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=true;}});
@@ -52,7 +56,7 @@ function setup(){
   marker=new THREE.Mesh(new THREE.TorusGeometry(.35,.025,8,24),new THREE.MeshBasicMaterial({color:0x00eaff})); marker.rotation.x=Math.PI/2; marker.visible=false;scene.add(marker);
   resetState(); ready=true;
 }
-loader.load('./field.glb',g=>{scene.add(g.scene);setup();mirrorField(g.scene)},undefined,e=>{ $('carry').textContent='Could not load field.glb — run a local web server.'; console.error(e); });
+loader.load('./field.glb',g=>{scene.add(g.scene);modeChosen.then(()=>{setup();if(mode==='multi')mirrorField(g.scene);})},undefined,e=>{ $('carry').textContent='Could not load field.glb — run a local web server.'; console.error(e); });
 
 
 function mealType(){ if(!state.plate)return null; const a=state.plate.items, set=new Set(a), first=a[0], last=a.at(-1), non=new Set(a.filter(x=>x!=='grain'));
@@ -123,7 +127,8 @@ function scoreAt(type,drink,zone,destination){animateDelivery(type,drink,destina
 function endMatch(){if(state.ended)return;state.ended=true;const type=mealType(),drink=state.cup?.water>0;if(type||drink)animateDelivery(type,drink);if(type){let p=mealBase[type]+(drink?12:0);addScore(p,`${label(type)}${drink?' + drink':''} — carried at match end`);}else if(drink)addScore(4,'Filled drink — carried at match end');$('finalScore').textContent=`${state.score} points`;$('breakdown').innerHTML=state.breakdown.map(x=>`<div>${x.why}<span style="float:right">+${x.points}</span></div>`).join('')||'<div>No points scored.</div>';$('results').classList.add('show');lbOpen();}
 function buildCollisionMap(){
   const floor=named.Floor;if(!floor)return;
-  const box=new THREE.Box3().setFromObject(floor); const mx=box.max.x-.6,mz=box.max.z-.6; floorBounds={minX:-mx,maxX:mx,minZ:-mz,maxZ:mz}; // quadrant floor mirrored about the field centre
+  const box=new THREE.Box3().setFromObject(floor); const mx=box.max.x-.6,mz=box.max.z-.6,multi=mode==='multi'; // multiplayer: quadrant floor mirrored about the field centre
+  floorBounds=multi?{minX:-mx,maxX:mx,minZ:-mz,maxZ:mz}:{minX:box.min.x+.6,maxX:mx,minZ:box.min.z+.6,maxZ:mz};
   // FieldStructure-local X/Z bounds, not its all-enclosing bounds.
   // The first four segments were measured from field.glb CAD geometry.
   // Two dining/garden dividers; the gap at X=3.5..5.5 is the doorway.
@@ -132,7 +137,8 @@ function buildCollisionMap(){
   // and everything is mirrored into all four quadrants.
   const segments=[[-.271,3.5,5.5,5.803],[5.5,5.803,0,5.803],[-0.031,0.031,6.344,9.010],
     [11.81,11.96,-1.31,11.96],[-1.31,11.96,11.81,11.96]]
-    .flatMap(([a,b,c,d])=>[[a,b,c,d],[-b,-a,c,d],[a,b,-d,-c],[-b,-a,-d,-c]]);
+    .flatMap(([a,b,c,d])=>mode==='multi'?[[a,b,c,d],[-b,-a,c,d],[a,b,-d,-c],[-b,-a,-d,-c]]:[[a,b,c,d]]);
+  if(mode!=='multi')segments.push([-1.375,-1.225,-1.31,11.79],[-1.31,11.79,-1.375,-1.225]); // single quadrant keeps its -X/-Z closing walls
   collisionBoxes.length=0;
   collisionStepLimit=.1;
   if(fieldStructure){
@@ -436,7 +442,7 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
 
 // Multiplayer client: WebSocket to server/server.mjs (?room=NAME, ?ws=ws://host:port to override).
 // Falls back to solo play if the server is unreachable.
-(function(){
+(async function(){await modeChosen;if(mode!=='multi')return;
   let room=new URLSearchParams(location.search).get('room')||''; // empty = server auto-matchmakes into a public room
   try{if(!localStorage.getItem('uname')){const n=(prompt('Nickname?')||'').trim().slice(0,16);if(n)localStorage.setItem('uname',n);}}catch{}
   const url=new URLSearchParams(location.search).get('ws')||`ws://${location.hostname}:8080`;
