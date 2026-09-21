@@ -289,7 +289,82 @@ function drawMinimap() {
     minimapCtx.canvas.style.display = 'block';
   }
 }
-function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();const dt=Math.min(clock.getDelta(),.05);if(ready&&!state.ended){
+let gpPrevA = false, gpPrevB = false, gpPrevStart = false, gpWasActive = false;
+
+function pollGamepad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = pads.find(p => p && p.connected);
+  
+  if (!gp) {
+    if (gpWasActive) {
+      keys.KeyW = false;
+      keys.KeyS = false;
+      keys.KeyA = false;
+      keys.KeyD = false;
+      gpWasActive = false;
+    }
+    return;
+  }
+
+  const axes = gp.axes;
+  const buttons = gp.buttons;
+  
+  // Safe access helpers
+  const btn = i => !!(buttons[i] && buttons[i].pressed);
+  const ax = i => axes[i] || 0;
+  
+  // Drive controls
+  let forward = ax(1) < -0.25 || btn(12);
+  let backward = ax(1) > 0.25 || btn(13);
+  let left = ax(0) < -0.25 || ax(2) < -0.25 || btn(14);
+  let right = ax(0) > 0.25 || ax(2) > 0.25 || btn(15);
+  
+  // Determine if any direction is active
+  const active = forward || backward || left || right;
+  
+  // Set keys based on active state and previous state
+  if (active) {
+    gpWasActive = true;
+    keys.KeyW = forward;
+    keys.KeyS = backward;
+    keys.KeyA = left;
+    keys.KeyD = right;
+  } else if (gpWasActive) {
+    // Clear all keys when gamepad is inactive but was active previously
+    keys.KeyW = false;
+    keys.KeyS = false;
+    keys.KeyA = false;
+    keys.KeyD = false;
+    gpWasActive = false;
+  }
+  
+  // Button controls
+  const aPressed = btn(0);
+  const bPressed = btn(1);
+  const startPressed = btn(9);
+  
+  // A button - interact
+  if (aPressed && !gpPrevA && ready && !state.ended) {
+    const c = objectCandidates()[0];
+    if (c) {
+      if (typeof act === 'function') {
+        act(c);
+      } else {
+        c.fn();
+      }
+    }
+  }
+  
+  // B or Start button - restart
+  if ((bPressed && !gpPrevB) || (startPressed && !gpPrevStart)) {
+    restart();
+  }
+  
+  gpPrevA = aPressed;
+  gpPrevB = bPressed;
+  gpPrevStart = startPressed;
+}
+function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();pollGamepad();const dt=Math.min(clock.getDelta(),.05);if(ready&&!state.ended){
   const turn=(keys.KeyA||keys.ArrowLeft?1:0)-(keys.KeyD||keys.ArrowRight?1:0);robot.rotation.y+=turn*3*dt;
   const input=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0), target=input>0?4.5:input<0?-3:0;
   driveSpeed=THREE.MathUtils.damp(driveSpeed,target,input?16:20,dt);if(Math.abs(driveSpeed)<.01)driveSpeed=0;moveRobot(driveSpeed*dt);
@@ -335,7 +410,8 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
 // Multiplayer client: WebSocket to server/server.mjs (?room=NAME, ?ws=ws://host:port to override).
 // Falls back to solo play if the server is unreachable.
 (function(){
-  const room=new URLSearchParams(location.search).get('room')||'lobby';
+  let room=new URLSearchParams(location.search).get('room')||''; // empty = server auto-matchmakes into a public room
+  try{if(!localStorage.getItem('uname')){const n=(prompt('Nickname?')||'').trim().slice(0,16);if(n)localStorage.setItem('uname',n);}}catch{}
   const url=new URLSearchParams(location.search).get('ws')||`ws://${location.hostname}:8080`;
   const peers=new Map(), pending=new Map(), esc=s=>String(s).replace(/[<&]/g,'');
   const name=()=>{try{return(localStorage.getItem('uname')||'').slice(0,16)||'Player';}catch{return'Player';}};
@@ -347,7 +423,7 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
     claim:n=>new Promise(r=>{pending.set(n,r);mp.send({t:'claim',n});setTimeout(()=>pending.delete(n)&&r(false),1500);})};list.style.display='';};
   ws.onclose=()=>{mp=null;list.style.display='none';[...peers.keys()].forEach(drop);for(const r of pending.values())r(false);pending.clear();};
   ws.onmessage=async e=>{const m=JSON.parse(e.data);
-    if(m.t==='init'){while(!ready)await new Promise(r=>setTimeout(r,100));m.claims.forEach(applyTaken);state.time=Math.max(0,120-m.elapsed);}
+    if(m.t==='init'){room=m.room;while(!ready)await new Promise(r=>setTimeout(r,100));m.claims.forEach(applyTaken);state.time=Math.max(0,120-m.elapsed);}
     else if(m.t==='p'){let o=peers.get(m.id);
       if(!o){const hue=[...m.id].reduce((a,c)=>a+c.charCodeAt(0)*37,0)%360,mesh=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:new THREE.Color(`hsl(${hue},80%,55%)`)}));
         mesh.position.set(m.x,robot.position.y,m.z);scene.add(mesh);others.push(mesh);o={mesh,hue};peers.set(m.id,o);}
