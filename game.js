@@ -8,6 +8,8 @@ renderer.shadowMap.enabled = true; document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x9dc8df);
 const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 200);
 scene.add(new THREE.HemisphereLight(0xd9efff,0x334225,2.2)); const sun=new THREE.DirectionalLight(0xffffff,2.4);sun.position.set(8,14,5);sun.castShadow=true;scene.add(sun);
+Object.assign(sun.shadow.camera,{left:-20,right:20,top:20,bottom:-20});sun.shadow.camera.updateProjectionMatrix();sun.shadow.mapSize.set(2048,2048);sun.shadow.bias=-.0005;sun.shadow.normalBias=.03; // frustum covers the whole 4-quadrant field
+const AERIAL=new URLSearchParams(location.search).has('aerial'); // ?aerial = fixed top-down camera over the whole field
 const clock = new THREE.Clock(), loader = new GLTFLoader();
 let named={}, robot, robotVisual, marker, ready=false, keys={}, lastPrompt='', state;
 let floorBounds, fieldStructure, spawnRotation=0, driveSpeed=0;
@@ -27,6 +29,8 @@ function resetState(){ state={score:0,time:120,ended:false,plate:null,cup:null,v
 function addScore(points, why){ if(!points)return; state.score+=points; state.breakdown.push({points,why}); $('score').textContent=state.score; }
 function hideObject(name){const o=named[name];if(o){o.visible=false; o.userData.hidden=true;}}
 function setup(){
+  // The single-quadrant CAD has fake closing walls at x/z=-1.3; they'd cut through the middle of the full field.
+  scene.traverse(o=>{if(o.isMesh&&/^CloseWall/.test(o.material?.name||''))o.visible=false;});
   scene.traverse(o=>{if(o.name) named[o.name]=o; if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
   fieldStructure=named.FieldStructure;
   if(fieldStructure) fieldStructure.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=true;}});
@@ -48,7 +52,7 @@ function setup(){
   marker=new THREE.Mesh(new THREE.TorusGeometry(.35,.025,8,24),new THREE.MeshBasicMaterial({color:0x00eaff})); marker.rotation.x=Math.PI/2; marker.visible=false;scene.add(marker);
   resetState(); ready=true;
 }
-loader.load('./field.glb',g=>{scene.add(g.scene);setup()},undefined,e=>{ $('carry').textContent='Could not load field.glb — run a local web server.'; console.error(e); });
+loader.load('./field.glb',g=>{scene.add(g.scene);setup();mirrorField(g.scene)},undefined,e=>{ $('carry').textContent='Could not load field.glb — run a local web server.'; console.error(e); });
 
 
 function mealType(){ if(!state.plate)return null; const a=state.plate.items, set=new Set(a), first=a[0], last=a.at(-1), non=new Set(a.filter(x=>x!=='grain'));
@@ -75,7 +79,7 @@ function objectCandidates(){ const out=[]; const add=(o,kind,text,fn)=>{
   const type=mealType(), drink=state.cup?.water>0;
   const zoneDefs=[['QCA_Tile','QCA'],['WarmingShelf','Warming Shelf'],['BalanceBuffetShelf','Balance Buffet']];
   for(const [n,z] of zoneDefs) if(type||drink)add(named[n],'score',scorePrompt(type,drink,z),()=>scoreAt(type,drink,z,named[n]));
-  for(let i=0;i<4;i++)if(!state.tables.has(i)&&(type||drink))add(named[`Table_${i}`],'score',scorePrompt(type,drink,'Dining Table'),()=>{state.tables.add(i);scoreAt(type,drink,'Dining Table',named[`Table_${i}`])});
+  for(const t of tables){const g=tableGid(t);if(!state.tables.has(g)&&(type||drink))add(t,'score',scorePrompt(type,drink,'Dining Table'),()=>{state.tables.add(g);scoreAt(type,drink,'Dining Table',t)});}
   return out.filter(x=>x.d<1.35).sort((a,b)=>a.d-b.d);
 }
 // Shared, tiny meshes: allocations happen only on interactions, never inside the tween loop.
@@ -119,18 +123,16 @@ function scoreAt(type,drink,zone,destination){animateDelivery(type,drink,destina
 function endMatch(){if(state.ended)return;state.ended=true;const type=mealType(),drink=state.cup?.water>0;if(type||drink)animateDelivery(type,drink);if(type){let p=mealBase[type]+(drink?12:0);addScore(p,`${label(type)}${drink?' + drink':''} — carried at match end`);}else if(drink)addScore(4,'Filled drink — carried at match end');$('finalScore').textContent=`${state.score} points`;$('breakdown').innerHTML=state.breakdown.map(x=>`<div>${x.why}<span style="float:right">+${x.points}</span></div>`).join('')||'<div>No points scored.</div>';$('results').classList.add('show');lbOpen();}
 function buildCollisionMap(){
   const floor=named.Floor;if(!floor)return;
-  const box=new THREE.Box3().setFromObject(floor); floorBounds={minX:box.min.x+.6,maxX:box.max.x-.6,minZ:box.min.z+.6,maxZ:box.max.z-.6};
+  const box=new THREE.Box3().setFromObject(floor); const mx=box.max.x-.6,mz=box.max.z-.6; floorBounds={minX:-mx,maxX:mx,minZ:-mz,maxZ:mz}; // quadrant floor mirrored about the field centre
   // FieldStructure-local X/Z bounds, not its all-enclosing bounds.
   // The first four segments were measured from field.glb CAD geometry.
   // Two dining/garden dividers; the gap at X=3.5..5.5 is the doorway.
   // Two closing walls are separate primitives in FieldStructure.
-  const segments=[[-.271,3.5,5.5,5.803],[5.5,5.803,0,5.803],
-    [-1.375,-1.225,-1.31,11.79],[-1.31,11.79,-1.375,-1.225],
-    // Panel identified by a live click + connected-triangle flood-fill.
-    [-0.031,0.031,6.344,9.010],
-    // The model only has closing walls on the -X and -Z sides; mirror them onto
-    // the open +X / +Z edges (just outside the wood floor) so the robot cannot drive off the field.
-    [11.81,11.96,-1.31,11.96],[-1.31,11.96,11.81,11.96]];
+  // Quadrant-local walls (dividers, doorway at |X|=3.5..5.5, +X/+Z perimeter); the fake closing walls are dropped
+  // and everything is mirrored into all four quadrants.
+  const segments=[[-.271,3.5,5.5,5.803],[5.5,5.803,0,5.803],[-0.031,0.031,6.344,9.010],
+    [11.81,11.96,-1.31,11.96],[-1.31,11.96,11.81,11.96]]
+    .flatMap(([a,b,c,d])=>[[a,b,c,d],[-b,-a,c,d],[a,b,-d,-c],[-b,-a,-d,-c]]);
   collisionBoxes.length=0;
   collisionStepLimit=.1;
   if(fieldStructure){
@@ -168,14 +170,39 @@ function moveRobot(distance){
   }
 }
 const others=[]; let mp=null, busy=false;
+// Full 4-quadrant field: my quadrant is always the live one at local (+,+); the other three are mirrored scenery clones.
+// Global quadrant q comes from the server: 0 red (+,+), 1 blue (-,+), 2 yellow (-,-), 3 green (+,-). Only the network layer uses global coords.
+const QS=[[1,1],[-1,1],[-1,-1],[1,-1]], QCOL=['#ff4545','#3b82ff','#ffd21f','#2ecc71'];
+let myQ=0; const clones=new Map(), tables=[], quadTints=[];
+// Local quadrant (cx,cz) -> global team colour; re-run once the server tells us which quadrant we own.
+const tintQuadrants=()=>{for(const t of quadTints){const q=QS.findIndex(([x,z])=>x===QS[myQ][0]*t.cx&&z===QS[myQ][1]*t.cz);t.set(QCOL[q]);}};
+const cloneFor=q=>clones.get(`${QS[myQ][0]*QS[q][0]},${QS[myQ][1]*QS[q][1]}`);
+const toGlobal=(x,z)=>[QS[myQ][0]*x,QS[myQ][1]*z]; // its own inverse, so also global->local
+const mirrorRy=ry=>Math.atan2(Math.sin(ry)*QS[myQ][0],Math.cos(ry)*QS[myQ][1]);
+const tableGid=o=>{const p=pos(o),[gx,gz]=toGlobal(p.x,p.z);return (Math.round(gx/3)+1)*3+Math.round(gz/3)+1;}; // 0..8, same table for every player
+function mirrorField(src){
+  for(const [cx,cz] of [[-1,1],[1,-1],[-1,-1]]){const c=src.clone(true);c.scale.x*=cx;c.scale.z*=cz;scene.add(c);clones.set(`${cx},${cz}`,c);}
+  const rsa=[[named.RSA_Tile,1,1],...[...clones].map(([k,c])=>[c.getObjectByName('RSA_Tile'),...k.split(',').map(Number)])];
+  for(const [o,cx,cz] of rsa)if(o){o.material=o.material.clone();quadTints.push({set:c=>o.material.color.set(c),cx,cz});}
+  for(const cx of[1,-1])for(const cz of[1,-1]){ // translucent floor wash so each quadrant reads as its team colour
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(11.8,11.8),new THREE.MeshBasicMaterial({transparent:true,opacity:.28,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));
+    m.rotation.x=-Math.PI/2;m.position.set(cx*5.9,.02,cz*5.9);scene.add(m);quadTints.push({set:c=>m.material.color.set(c),cx,cz});}
+  tintQuadrants();
+  scene.updateMatrixWorld(true);
+  const all=[0,1,2,3].map(i=>named[`Table_${i}`]).filter(Boolean),seen=new Set();
+  clones.forEach(c=>c.traverse(o=>{if(/^Table_\d$/.test(o.name))all.push(o);}));
+  for(const t of all){const p=pos(t),k=`${Math.round(p.x)},${Math.round(p.z)}`;if(seen.has(k))continue;seen.add(k);
+    t.userData.interactionBounds=new THREE.Box3().setFromObject(t);tables.push(t);}
+}
 const CLAIM=/^(Plate|Cup|Veg|Fruit|Dairy|Protein|Grain|Water|Table)_\d+$/;
 // Shared items (pickups, ingredients, dining tables) need the server's OK first: first claim wins.
-async function act(c){if(busy)return;if(!mp||!CLAIM.test(c.o.name)){c.fn();return;}busy=true;try{if(await mp.claim(c.o.name)&&!state.ended)c.fn();}finally{busy=false;}}
+async function act(c){if(busy)return;const n=c.o.name;if(!mp||!CLAIM.test(n)){c.fn();return;}busy=true;try{if(await mp.claim(n.startsWith('Table_')?'Table_'+tableGid(c.o):myQ+':'+n)&&!state.ended)c.fn();}finally{busy=false;}}
 function restart(){if(mp){if(state.ended)mp.send({t:'reset'});}else doRestart();}
 function doRestart(){
   if(!ready)return;
   state.taken.forEach(n=>{const o=named[n];if(o){o.visible=true;o.userData.hidden=false;}});
   for(let i=0;i<3;i++){const stem=named[`PlateStem_${i}`];if(stem){stem.visible=true;stem.userData.hidden=false;}}
+  clones.forEach(c=>c.traverse(o=>{if(o.userData.hidden){o.visible=true;o.userData.hidden=false;}}));
   clearAnimations();resetState(); driveSpeed=0; keys={};
   const start=named.RSA_Tile;robot.position.copy(start?pos(start):new THREE.Vector3());robot.position.y+=.12;robot.rotation.y=spawnRotation;
   $('score').textContent='0';$('results').classList.remove('show');hud();
@@ -371,7 +398,7 @@ function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();pollGamepad()
   state.time=Math.max(0,state.time-dt);const c=objectCandidates()[0];hud(c);if(state.time===0)endMatch();
 }if(robot){
   updateAnimations(dt);const look=robot.position.clone().add(new THREE.Vector3(0,.35,0)), desired=robot.position.clone().add(cameraOffset.clone().applyAxisAngle(up,robot.rotation.y));
-  camera.position.lerp(desired,1-Math.exp(-8*dt));camera.lookAt(look);
+  if(AERIAL){camera.position.set(0,29,.01);camera.lookAt(0,0,0);}else{camera.position.lerp(desired,1-Math.exp(-8*dt));camera.lookAt(look);}
 }renderer.render(scene,camera);} tick();
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 
@@ -416,26 +443,28 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
   const peers=new Map(), pending=new Map(), esc=s=>String(s).replace(/[<&]/g,'');
   const name=()=>{try{return(localStorage.getItem('uname')||'').slice(0,16)||'Player';}catch{return'Player';}};
   const list=document.createElement('div');list.className='card';list.style.cssText='position:absolute;top:18px;right:18px;min-width:150px;display:none';$('hud').append(list);
-  const applyTaken=n=>{if(!ready)return;if(n.startsWith('Table_'))state.tables.add(+n.slice(6));else{state.taken.add(n);hideObject(n);if(n.startsWith('Plate_'))hideObject(n.replace('Plate_','PlateStem_'));}};
+  const applyTaken=n=>{if(!ready)return;if(n.startsWith('Table_')){state.tables.add(+n.slice(6));return;}
+    const [q,name]=n.split(':'),root=+q===myQ?null:cloneFor(+q),hide=k=>{const o=root?root.getObjectByName(k):named[k];if(o){o.visible=false;o.userData.hidden=true;}};
+    if(!root)state.taken.add(name);hide(name);if(name.startsWith('Plate_'))hide(name.replace('Plate_','PlateStem_'));};
   const drop=k=>{const o=peers.get(k);if(o){scene.remove(o.mesh);others.splice(others.indexOf(o.mesh),1);peers.delete(k);}};
   const ws=new WebSocket(`${url}/?room=${encodeURIComponent(room)}`);
   ws.onopen=()=>{mp={send:o=>ws.readyState===1&&ws.send(JSON.stringify(o)),
     claim:n=>new Promise(r=>{pending.set(n,r);mp.send({t:'claim',n});setTimeout(()=>pending.delete(n)&&r(false),1500);})};list.style.display='';};
   ws.onclose=()=>{mp=null;list.style.display='none';[...peers.keys()].forEach(drop);for(const r of pending.values())r(false);pending.clear();};
   ws.onmessage=async e=>{const m=JSON.parse(e.data);
-    if(m.t==='init'){room=m.room;while(!ready)await new Promise(r=>setTimeout(r,100));m.claims.forEach(applyTaken);state.time=Math.max(0,120-m.elapsed);}
+    if(m.t==='init'){room=m.room;myQ=m.q??0;tintQuadrants();while(!ready)await new Promise(r=>setTimeout(r,100));m.claims.forEach(applyTaken);state.time=Math.max(0,120-m.elapsed);}
     else if(m.t==='p'){let o=peers.get(m.id);
-      if(!o){const hue=[...m.id].reduce((a,c)=>a+c.charCodeAt(0)*37,0)%360,mesh=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:new THREE.Color(`hsl(${hue},80%,55%)`)}));
-        mesh.position.set(m.x,robot.position.y,m.z);scene.add(mesh);others.push(mesh);o={mesh,hue};peers.set(m.id,o);}
-      Object.assign(o,{x:m.x,z:m.z,ry:m.ry,name:m.name,score:m.score,seen:performance.now()});}
+      if(!o){const col=QCOL[m.q]||'#ff8800',mesh=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:new THREE.Color(col)}));
+        const[lx,lz]=toGlobal(m.x,m.z);mesh.position.set(lx,robot.position.y,lz);scene.add(mesh);others.push(mesh);o={mesh,col};peers.set(m.id,o);}
+      const[px,pz]=toGlobal(m.x,m.z);Object.assign(o,{x:px,z:pz,ry:mirrorRy(m.ry),name:m.name,score:m.score,seen:performance.now()});}
     else if(m.t==='left')drop(m.id);
     else if(m.t==='taken')applyTaken(m.n);
     else if(m.t==='start')doRestart();
     else if(m.t==='ok'||m.t==='no'){const r=pending.get(m.n);pending.delete(m.n);r?.(m.t==='ok');}};
-  setInterval(()=>{if(ready&&mp)mp.send({t:'p',name:name(),x:robot.position.x,z:robot.position.z,ry:robot.rotation.y,score:state.score});},100);
+  setInterval(()=>{if(ready&&mp){const[gx,gz]=toGlobal(robot.position.x,robot.position.z);mp.send({t:'p',name:name(),x:gx,z:gz,ry:mirrorRy(robot.rotation.y),score:state.score});}},100);
   (function loop(){requestAnimationFrame(loop);if(!mp)return;const now=performance.now();
     for(const[k,o]of[...peers]){if(now-o.seen>3000){drop(k);continue;}
       o.mesh.position.x+=(o.x-o.mesh.position.x)*.25;o.mesh.position.z+=(o.z-o.mesh.position.z)*.25;o.mesh.position.y=robot.position.y;o.mesh.rotation.y=o.ry;}
-    const rows=[{n:name()+' (you)',s:state?.score??0,c:'#7ae6ff'},...[...peers.values()].map(o=>({n:o.name,s:o.score,c:`hsl(${o.hue},80%,65%)`}))].sort((a,b)=>b.s-a.s);
+    const rows=[{n:name()+' (you)',s:state?.score??0,c:QCOL[myQ]},...[...peers.values()].map(o=>({n:o.name,s:o.score,c:o.col}))].sort((a,b)=>b.s-a.s);
     list.innerHTML=`<span class="muted">ROOM ${esc(room)}</span>`+rows.map(r=>`<div style="color:${r.c}">${esc(r.n)}<span style="float:right">${r.s}</span></div>`).join('');})();
 })();
