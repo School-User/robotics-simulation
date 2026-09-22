@@ -404,7 +404,11 @@ function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();pollGamepad()
   state.time=Math.max(0,state.time-dt);const c=objectCandidates()[0];hud(c);if(state.time===0)endMatch();
 }if(robot){
   updateAnimations(dt);const look=robot.position.clone().add(new THREE.Vector3(0,.35,0)), desired=robot.position.clone().add(cameraOffset.clone().applyAxisAngle(up,robot.rotation.y));
-  if(AERIAL){camera.position.set(0,29,.01);camera.lookAt(0,0,0);}else{camera.position.lerp(desired,1-Math.exp(-8*dt));camera.lookAt(look);}
+  if(AERIAL){
+    // Solo mode only has one quadrant of geometry, so centre the aerial camera on that quadrant, not the full-field origin.
+    const acx=floorBounds&&mode!=='multi'?(floorBounds.minX+floorBounds.maxX)/2:0, acz=floorBounds&&mode!=='multi'?(floorBounds.minZ+floorBounds.maxZ)/2:.01;
+    camera.position.set(acx,29,acz);camera.lookAt(acx,0,acz);
+  }else{camera.position.lerp(desired,1-Math.exp(-8*dt));camera.lookAt(look);}
 }renderer.render(scene,camera);} tick();
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 
