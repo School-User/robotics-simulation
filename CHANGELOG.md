@@ -4,11 +4,13 @@ Every update to the Byte to Bite simulation, newest first. Dates are 2026, Mount
 
 - **Live** means the change is on the public site (`main` branch).
 - **Local** means it exists only in the `history` branch and on the developer's laptop.
+- **Private repo** means it is in the private `robotics-simulation-multiplayer` repo, waiting to be merged into the public one.
 
 To see the code for any version, open the [`history` branch commits](https://github.com/School-User/robotics-simulation/commits/history). The live site's own changes are in the [`main` commits](https://github.com/School-User/robotics-simulation/commits/main).
 
 | Date | Update | Built with | Status |
 |---|---|---|---|
+| Oct 1 | Multiplayer made ready to test: 15-second lobby before each match (no joining mid-match), match clock kept by the server so every player stays in sync, and a fix for a crash when joining while the field was still loading. | Claude Code (Opus 5.5) | Private repo |
 | Sep 29 | Credit line: "Made using AI · by Siddh Patel, Team Rock Canyon High School". This changelog and the `history` branch. | Claude Code (Opus 5.5) | Live |
 | Sep 22 | Single-player aerial view is centered on the one quadrant instead of the full field. | Claude Code (Sonnet 5) | Local |
 | Sep 20 | Start screen to choose **Single Player** (one quadrant) or **Multiplayer** (full field). | Claude Code (Sonnet 5) | Local |
