@@ -1,8 +1,19 @@
 // Tiny room server: relays robot poses, arbitrates item claims (first wins), owns the lobby/match cycle.
 // Robot movement stays client-side. ponytail: no rule validation/anti-cheat; add if strangers play.
+// One process serves the game files, /health (for the keep-alive pinger) and the WebSocket on the same port, as Render expects.
 import {WebSocketServer} from 'ws';
+import {createServer} from 'http';
+import {createReadStream} from 'fs';
+const ROOT=new URL('../',import.meta.url).pathname;
+const FILES={'/':['index.html','text/html'],'/index.html':['index.html','text/html'],'/game.js':['game.js','text/javascript'],'/field.glb':['field.glb','model/gltf-binary']}; // whitelist: nothing else is served
+const http=createServer((req,res)=>{const path=new URL(req.url,'http://x').pathname,f=FILES[path];
+  if(path==='/health'){res.end('ok');return;}
+  if(!f){res.writeHead(404).end('not found');return;}
+  res.writeHead(200,{'Content-Type':f[1],'Cache-Control':path==='/field.glb'?'public, max-age=86400':'no-cache'});
+  createReadStream(ROOT+f[0]).on('error',()=>res.destroy()).pipe(res);});
 const CLAIM=/^([0-3]:)?(Plate|Cup|Veg|Fruit|Dairy|Protein|Grain|Water|Table)_\d+$/;
-const rooms=new Map(), wss=new WebSocketServer({port:+process.env.PORT||8080,maxPayload:2048});
+const rooms=new Map(), wss=new WebSocketServer({server:http,maxPayload:2048});
+http.listen(+process.env.PORT||8080);
 const MAX=4,LOBBY=15,MATCH=120,BREAK=10; // seconds; BREAK = results screen / score-submit window
 // Rooms cycle lobby -> match -> results -> lobby. r.start is when the match begins; joins are only allowed before it (no joining mid-match).
 const open=r=>Date.now()<r.start&&r.clients.size<MAX;
@@ -32,4 +43,4 @@ wss.on('connection',(ws,req)=>{
   });
   ws.on('close',()=>{r.clients.delete(ws);others({t:'left',id});if(!r.clients.size)rooms.delete(room);});
 });
-console.log('game server on :'+wss.options.port);
+console.log('game server on :'+(+process.env.PORT||8080));

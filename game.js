@@ -444,12 +444,12 @@ async function lbLoad(){try{const rows=await(await sb('leaderboard?select=name,s
 function lbOpen(){try{$('uname').value=localStorage.getItem('uname')||'';}catch{}$('lbmsg').textContent='';$('post').disabled=false;lbLoad();}
 $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbmsg').textContent='Enter a username';return;}try{localStorage.setItem('uname',name);}catch{}$('post').disabled=true;try{const r=await sb('scores',{method:'POST',body:JSON.stringify({name,score:state.score})});$('lbmsg').textContent=r.ok?'Submitted!':'Rejected (bad name or score)';if(!r.ok)$('post').disabled=false;}catch{$('lbmsg').textContent='Could not reach leaderboard';$('post').disabled=false;}lbLoad();};
 
-// Multiplayer client: WebSocket to server/server.mjs (?room=NAME, ?ws=ws://host:port to override).
+// Multiplayer client: WebSocket to server/server.mjs, which also serves this page (?room=NAME, ?ws=ws://host:port to override).
 // Falls back to solo play if the server is unreachable.
 (async function(){await modeChosen;if(mode!=='multi')return;
   let room=new URLSearchParams(location.search).get('room')||''; // empty = server auto-matchmakes into a public room
   try{if(!localStorage.getItem('uname')){const n=(prompt('Nickname?')||'').trim().slice(0,16);if(n)localStorage.setItem('uname',n);}}catch{}
-  const url=new URLSearchParams(location.search).get('ws')||`ws://${location.hostname}:8080`;
+  const url=new URLSearchParams(location.search).get('ws')||`${location.protocol==='https:'?'wss':'ws'}://${location.host}`; // same server that served the page
   const peers=new Map(), pending=new Map(), esc=s=>String(s).replace(/[<&]/g,'');
   const LOBBY_MSG='Waiting for players… match starts in ';let waitMsg=LOBBY_MSG;
   const name=()=>{try{return(localStorage.getItem('uname')||'').slice(0,16)||'Player';}catch{return'Player';}};
