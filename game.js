@@ -32,10 +32,23 @@ const label = s => s[0].toUpperCase()+s.slice(1);
 function resetState(){ state={score:0,time:120,ended:false,plate:null,cup:null,valve:false,drone:0,opened:{fridge:false,bread:false},taken:new Set(),tables:new Set(),bonuses:new Set(),breakdown:[]}; }
 function addScore(points, why){ if(!points)return; state.score+=points; state.breakdown.push({points,why}); $('score').textContent=state.score; }
 function hideObject(name){const o=named[name];if(o){o.visible=false; o.userData.hidden=true;}}
+// PLATES plates and CUPS cups (the GLB has 3 and 2; the rest are copies), in a grid on the open floor around x≈9.3, z≈-1.4,
+// just across the line into the neighbouring quadrant. Solo has a closing wall at z=-1.3, so it uses the mirrored spot (z>0).
+const PLATES=9, CUPS=6;
+function layoutPlatesAndCups(){
+  scene.updateMatrixWorld(true);
+  const zs=mode==='multi'?-1:1, center=o=>new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+  const shift=(o,dx,dz)=>{const p=o.parent,a=p.worldToLocal(pos(o)),b=p.worldToLocal(pos(o).add(new THREE.Vector3(dx,0,dz)));o.position.add(b.sub(a));o.updateMatrixWorld(true);};
+  const copy=(src,name)=>{let o=named[name];if(!o&&src){o=src.clone();o.name=name;src.parent.add(o);named[name]=o;}return o;};
+  for(let i=0;i<PLATES;i++){const plate=copy(named.Plate_0,`Plate_${i}`),stem=copy(named.PlateStem_0,`PlateStem_${i}`);if(!plate)continue;
+    const c=center(plate),dx=8.6+(i%3)*.95-c.x,dz=zs*(.75+Math.floor(i/3)*.95)-c.z;shift(plate,dx,dz);if(stem)shift(stem,dx,dz);}
+  for(let i=0;i<CUPS;i++){const cup=copy(named.Cup_0,`Cup_${i}`);if(!cup)continue;const c=center(cup);shift(cup,8.45+i*.5-c.x,zs*3.5-c.z);}
+}
 function setup(){
   // The single-quadrant CAD has fake closing walls at x/z=-1.3; they'd cut through the middle of the full field.
   if(mode==='multi')scene.traverse(o=>{if(o.isMesh&&/^CloseWall/.test(o.material?.name||''))o.visible=false;});
   scene.traverse(o=>{if(o.name) named[o.name]=o; if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
+  layoutPlatesAndCups();
   fieldStructure=named.FieldStructure;
   if(fieldStructure) fieldStructure.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=true;}});
   const missing=targetNames.filter(n=>!named[n]); if(missing.length) console.warn('Field objects not found:',missing.join(', '));
@@ -73,8 +86,8 @@ function objectCandidates(){ const out=[]; const add=(o,kind,text,fn)=>{
     if(b){p.x=THREE.MathUtils.clamp(robot.position.x,b.min.x,b.max.x);p.z=THREE.MathUtils.clamp(robot.position.z,b.min.z,b.max.z);}
     out.push({o,kind,text,fn,d:Math.hypot(p.x-robot.position.x,p.z-robot.position.z)});
   };
-  for(let i=0;i<3;i++) if(!state.taken.has(`Plate_${i}`)&&!state.plate)add(named[`Plate_${i}`],'pickup','Press E to pick up Plate',()=>{state.plate={items:[]};take(`Plate_${i}`)});
-  for(let i=0;i<2;i++) if(!state.taken.has(`Cup_${i}`)&&!state.cup)add(named[`Cup_${i}`],'pickup','Press E to pick up Cup',()=>{state.cup={water:0};take(`Cup_${i}`)});
+  for(let i=0;i<PLATES;i++) if(!state.taken.has(`Plate_${i}`)&&!state.plate)add(named[`Plate_${i}`],'pickup','Press E to pick up Plate',()=>{state.plate={items:[]};take(`Plate_${i}`)});
+  for(let i=0;i<CUPS;i++) if(!state.taken.has(`Cup_${i}`)&&!state.cup)add(named[`Cup_${i}`],'pickup','Press E to pick up Cup',()=>{state.cup={water:0};take(`Cup_${i}`)});
   if(!state.opened.fridge)add(named.Fridge,'station','Press E to open Fridge',()=>state.opened.fridge=true);
   if(!state.opened.bread)add(named.Breadbox,'station','Press E to open Breadbox',()=>state.opened.bread=true);
   if(!state.valve)add(named.IrrigationValve,'task','Press E to turn Irrigation Valve (+4)',()=>{state.valve=true;addScore(4,'Irrigation valve');});
@@ -207,7 +220,7 @@ function restart(){if(mp){if(state.ended)mp.send({t:'reset'});}else doRestart();
 function doRestart(){
   if(!ready)return;
   state.taken.forEach(n=>{const o=named[n];if(o){o.visible=true;o.userData.hidden=false;}});
-  for(let i=0;i<3;i++){const stem=named[`PlateStem_${i}`];if(stem){stem.visible=true;stem.userData.hidden=false;}}
+  for(let i=0;i<PLATES;i++){const stem=named[`PlateStem_${i}`];if(stem){stem.visible=true;stem.userData.hidden=false;}}
   clones.forEach(c=>c.traverse(o=>{if(o.userData.hidden){o.visible=true;o.userData.hidden=false;}}));
   clearAnimations();resetState(); driveSpeed=0; keys={};
   const start=named.RSA_Tile;robot.position.copy(start?pos(start):new THREE.Vector3());robot.position.y+=.12;robot.rotation.y=spawnRotation;
