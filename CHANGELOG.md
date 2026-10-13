@@ -9,6 +9,7 @@ To see the code for any version, open the [`history` branch commits](https://git
 
 | Date | Update | Built with | Status |
 |---|---|---|---|
+| Oct 13 | Anonymous visit counter: first visit asks Allow or Reject, and each choice is counted once. Allow also logs one anonymous row per play. | Claude Code (Sonnet 5.5) | Live |
 | Sep 29 | Credit line: "Made using AI · by Siddh Patel, Team Rock Canyon High School". This changelog and the `history` branch. | Claude Code (Opus 5.5) | Live |
 | Sep 22 | Single-player aerial view is centered on the one quadrant instead of the full field. | Claude Code (Sonnet 5) | Local |
 | Sep 20 | Start screen to choose **Single Player** (one quadrant) or **Multiplayer** (full field). | Claude Code (Sonnet 5) | Local |

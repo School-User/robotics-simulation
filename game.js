@@ -397,6 +397,12 @@ addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updat
 
 // Leaderboard on Supabase (REST). Score is client-reported, so it is honor-system.
 const sb=(p,o={})=>fetch(SUPABASE_URL+'/rest/v1/'+p,{...o,headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY,'Content-Type':'application/json',Prefer:'return=minimal'}});
+// Visit counter: first visit shows Allow/Reject; each choice is counted once (anonymous, no id). Allow also logs one row per play with a random id. Tables: plays-setup.sql.
+let consent,played;try{consent=localStorage.getItem('consent');}catch{}
+const play=()=>{if(played||consent!=='allow')return;played=1;let pid;try{pid=localStorage.getItem('pid')||crypto.randomUUID();localStorage.setItem('pid',pid);}catch{pid=crypto.randomUUID();}sb('plays',{method:'POST',body:JSON.stringify({pid,mode:'solo'})}).catch(()=>{});};
+const choose=async c=>{try{if((await sb('visits',{method:'POST',body:JSON.stringify({choice:c})})).ok)localStorage.setItem('consent',c);}catch{}consent=c;$('consent').style.display='none';play();}; // saved only if counted, so a missing table doesn't lose the choice
+if(!consent){$('consent').style.display='block';$('cyes').onclick=()=>choose('allow');$('cno').onclick=()=>choose('reject');}
+if(consent==='allow')play();
 async function lbLoad(){try{const rows=await(await sb('leaderboard?select=name,score&order=score.desc&limit=20')).json();$('lb').innerHTML=rows.map(x=>`<li>${x.name.replace(/[<&]/g,'')}<span style="float:right">${x.score}</span></li>`).join('')||'<li>No scores yet</li>';}catch{$('lb').innerHTML='<li>Leaderboard offline</li>';}}
 function lbOpen(){try{$('uname').value=localStorage.getItem('uname')||'';}catch{}$('lbmsg').textContent='';$('post').disabled=false;lbLoad();}
 $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbmsg').textContent='Enter a username';return;}try{localStorage.setItem('uname',name);}catch{}$('post').disabled=true;try{const r=await sb('scores',{method:'POST',body:JSON.stringify({name,score:state.score})});$('lbmsg').textContent=r.ok?'Submitted!':'Rejected (bad name or score)';if(!r.ok)$('post').disabled=false;}catch{$('lbmsg').textContent='Could not reach leaderboard';$('post').disabled=false;}lbLoad();};
