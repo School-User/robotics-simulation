@@ -14,9 +14,11 @@
 </head>
 <body>
   <div id="hud"><div id="top"><div class="card">SCORE<br><b id="score">0</b></div><div class="card">TIME<br><b id="timer">2:00</b></div></div><div id="carry" class="card">Loading field…</div><div id="prompt"></div></div>
+  <div id="consent" class="card" style="display:none;position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9;pointer-events:auto;text-align:center">Count this visit anonymously?<br><button id="cyes">Allow</button> <button id="cno">Reject</button></div>
   <div id="menu" class="show"><div class="panel"><h1>Byte to Bite</h1><div class="muted">Pick a practice map</div><div class="modes"><button id="solo" class="mode"><b>Single Player</b><span>One quadrant, just you. Practice a 2:00 run at your own pace.</span></button><button id="multi" class="mode"><b>Multiplayer</b><span>Full 4-quadrant field with up to 4 players. Joins a public room automatically.</span></button></div></div></div>
   <div id="credit">Made using AI · by Siddh Patel, Team Rock Canyon High School</div>
   <div id="results"><div class="panel"><h1>Match Complete</h1><div class="total" id="finalScore">0 points</div><div id="breakdown"></div><div id="lbsubmit"><input id="uname" maxlength="16" placeholder="Username" autocomplete="off"> <button id="post">Submit score</button> <span id="lbmsg" class="muted"></span></div><h3 style="margin:14px 0 6px">Leaderboard</h3><ol id="lb" class="muted"></ol><button id="again">Play Again</button></div></div>
+  <script>window.MP_SERVER="wss://robotics-simulation-multiplayer.onrender.com";/* empty = same host as the page */</script>
   <script>window.SUPABASE_URL="https://kmmewllzswkrofjhzzkj.supabase.co";window.SUPABASE_KEY="sb_publishable_j0pq1smgxPTmDL6C9g01Vw_RpFpdIsZ";</script>
   <script type="module" src="game.js"></script>
 </body>
