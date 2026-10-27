@@ -4,7 +4,7 @@ Every update to the Byte to Bite simulation, newest first. Dates are 2026, Mount
 
 - **Live** means the change is on the public site (`main` branch).
 - **Local** means it exists only in the `history` branch and on the developer's laptop.
-- **Private repo** means it is in the private `robotics-simulation-multiplayer` repo, waiting to be merged into the public one.
+- **Private repo** is retired: the private `robotics-simulation-multiplayer` repo is archived. All work now goes to this public repo.
 
 To see the code for any version, open the [`history` branch commits](https://github.com/School-User/robotics-simulation/commits/history). The live site's own changes are in the [`main` commits](https://github.com/School-User/robotics-simulation/commits/main).
 
