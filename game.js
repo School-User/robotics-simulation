@@ -412,7 +412,7 @@ function pollGamepad() {
 }
 function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();pollGamepad();const dt=Math.min(clock.getDelta(),.05);if(ready&&!state.ended&&performance.now()>=lobbyUntil){
   const turn=(keys.KeyA||keys.ArrowLeft?1:0)-(keys.KeyD||keys.ArrowRight?1:0);robot.rotation.y+=turn*3*dt;
-  const input=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0), target=input>0?4.5:input<0?-3:0;
+  const input=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0), target=input>0?3:input<0?-2:0;
   driveSpeed=THREE.MathUtils.damp(driveSpeed,target,input?16:20,dt);if(Math.abs(driveSpeed)<.01)driveSpeed=0;moveRobot(driveSpeed*dt);
   state.time=Math.max(0,matchEnd?(matchEnd-performance.now())/1000:state.time-dt);const c=objectCandidates()[0];hud(c);if(state.time===0)endMatch();
 }if(robot){
