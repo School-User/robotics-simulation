@@ -10,6 +10,7 @@ To see the code for any version, open the [`history` branch commits](https://git
 
 | Date | Update | Built with | Status |
 |---|---|---|---|
+| Oct 13 | Anonymous visit counter: first visit asks Allow or Reject, and each choice is counted once. Allow also logs one anonymous row per play. | Claude Code (Sonnet 5.5) | Live |
 | Oct 1 | 9 plates and 6 cups (was 3 and 2), moved off the start tile to the open floor by the outer wall. In multiplayer they sit just across the line in the neighbouring quadrant; in single player, at the same spot inside the quadrant. | Claude Code (Opus 5.5) | Private repo |
 | Oct 1 | Multiplayer made ready to test: 15-second lobby before each match (no joining mid-match), match clock kept by the server so every player stays in sync, and a fix for a crash when joining while the field was still loading. | Claude Code (Opus 5.5) | Private repo |
 | Sep 29 | Credit line: "Made using AI · by Siddh Patel, Team Rock Canyon High School". This changelog and the `history` branch. | Claude Code (Opus 5.5) | Live |

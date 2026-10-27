@@ -13,6 +13,7 @@
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
+  <div id="consent" class="card" style="display:none;position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9;pointer-events:auto;text-align:center">Count this visit anonymously?<br><button id="cyes">Allow</button> <button id="cno">Reject</button></div>
   <div id="hud"><div id="top"><div class="card">SCORE<br><b id="score">0</b></div><div class="card">TIME<br><b id="timer">2:00</b></div></div><div id="carry" class="card">Loading field…</div><div id="prompt"></div></div>
   <div id="consent" class="card" style="display:none;position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9;pointer-events:auto;text-align:center">Count this visit anonymously?<br><button id="cyes">Allow</button> <button id="cno">Reject</button></div>
   <div id="menu" class="show"><div class="panel"><h1>Byte to Bite</h1><div class="muted">Pick a practice map</div><div class="modes"><button id="solo" class="mode"><b>Single Player</b><span>One quadrant, just you. Practice a 2:00 run at your own pace.</span></button><button id="multi" class="mode"><b>Multiplayer</b><span>Full 4-quadrant field with up to 4 players. Joins a public room automatically.</span></button></div></div></div>
