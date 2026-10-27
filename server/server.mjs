@@ -14,7 +14,7 @@ const http=createServer((req,res)=>{const path=new URL(req.url,'http://x').pathn
 const CLAIM=/^([0-3]:)?(Plate|Cup|Veg|Fruit|Dairy|Protein|Grain|Water|Table)_\d+$/;
 const rooms=new Map(), wss=new WebSocketServer({server:http,maxPayload:2048});
 http.listen(+process.env.PORT||8080);
-const MAX=4,LOBBY=15,MATCH=120,BREAK=10; // seconds; BREAK = results screen / score-submit window
+const MAX=4,LOBBY=15,MATCH=180,BREAK=10; // seconds; BREAK = results screen / score-submit window
 // Rooms cycle lobby -> match -> results -> lobby. r.start is when the match begins; joins are only allowed before it (no joining mid-match).
 const open=r=>Date.now()<r.start&&r.clients.size<MAX;
 // Public rooms are "pub-N": join the fullest one still in its lobby (keeps matches lively), else open a new one.

@@ -26,23 +26,23 @@ const up=new THREE.Vector3(0,1,0), cameraOffset=new THREE.Vector3(0,5.5,7.5);
 const targetNames = ['RSA_Tile','DriverBox_Tile','QCA_Tile','Fridge','Breadbox','VegTray','FruitFrame','WaterStation','DronePost','Drone','IrrigationValve','WarmingShelf','BalanceBuffetShelf','Robot_Chassis','Robot_Arm'];
 for(let i=0;i<4;i++) targetNames.push(`Table_${i}`,`TableFiducial_${i}`);
 for(let i=0;i<3;i++) targetNames.push(`Plate_${i}`,`PlateStem_${i}`,`Dairy_${i}`,`Protein_${i}`,`Grain_${i}`);
-for(let i=0;i<2;i++) targetNames.push(`Cup_${i}`); for(let i=0;i<6;i++) targetNames.push(`Veg_${i}`,`Fruit_${i}`); for(let i=0;i<8;i++) targetNames.push(`Water_${i}`);
+for(let i=0;i<8;i++) targetNames.push(`Cup_${i}`); for(let i=0;i<6;i++) targetNames.push(`Veg_${i}`,`Fruit_${i}`); for(let i=0;i<8;i++) targetNames.push(`Water_${i}`);
 const pos = o => { const v=new THREE.Vector3(); o.getWorldPosition(v); return v; };
 const label = s => s[0].toUpperCase()+s.slice(1);
-function resetState(){ state={score:0,time:120,ended:false,plate:null,cup:null,valve:false,drone:0,opened:{fridge:false,bread:false},taken:new Set(),tables:new Set(),bonuses:new Set(),breakdown:[]}; }
+function resetState(){ state={score:0,time:180,ended:false,plate:null,cup:null,valve:false,drone:0,opened:{fridge:false,bread:false},taken:new Set(),tables:new Set(),bonuses:new Set(),breakdown:[]}; }
 function addScore(points, why){ if(!points)return; state.score+=points; state.breakdown.push({points,why}); $('score').textContent=state.score; }
 function hideObject(name){const o=named[name];if(o){o.visible=false; o.userData.hidden=true;}}
-// PLATES plates and CUPS cups (the GLB has 3 and 2; the rest are copies), in a grid on the open floor around x≈9.3, z≈-1.4,
-// just across the line into the neighbouring quadrant. Solo has a closing wall at z=-1.3, so it uses the mirrored spot (z>0).
-const PLATES=9, CUPS=6;
+// PLATES plates and CUPS cups per quadrant (8 each, 32 in the game; the GLB has 3 and 2, the rest are copies), in grids on the
+// open floor of the player's own quadrant around x≈9.3, z≈1.5. Solo and multi share this spot.
+const PLATES=8, CUPS=8;
 function layoutPlatesAndCups(){
   scene.updateMatrixWorld(true);
-  const zs=mode==='multi'?-1:1, center=o=>new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+  const zs=1, center=o=>new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
   const shift=(o,dx,dz)=>{const p=o.parent,a=p.worldToLocal(pos(o)),b=p.worldToLocal(pos(o).add(new THREE.Vector3(dx,0,dz)));o.position.add(b.sub(a));o.updateMatrixWorld(true);};
   const copy=(src,name)=>{let o=named[name];if(!o&&src){o=src.clone();o.name=name;src.parent.add(o);named[name]=o;}return o;};
   for(let i=0;i<PLATES;i++){const plate=copy(named.Plate_0,`Plate_${i}`),stem=copy(named.PlateStem_0,`PlateStem_${i}`);if(!plate)continue;
     const c=center(plate),dx=8.6+(i%3)*.95-c.x,dz=zs*(.75+Math.floor(i/3)*.95)-c.z;shift(plate,dx,dz);if(stem)shift(stem,dx,dz);}
-  for(let i=0;i<CUPS;i++){const cup=copy(named.Cup_0,`Cup_${i}`);if(!cup)continue;const c=center(cup);shift(cup,8.45+i*.5-c.x,zs*3.5-c.z);}
+  for(let i=0;i<CUPS;i++){const cup=copy(named.Cup_0,`Cup_${i}`);if(!cup)continue;const c=center(cup);shift(cup,8.6+(i%4)*.9-c.x,zs*(3.5+Math.floor(i/4)*.95)-c.z);}
 }
 function setup(){
   // The single-quadrant CAD has fake closing walls at x/z=-1.3; they'd cut through the middle of the full field.
