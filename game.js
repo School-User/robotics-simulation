@@ -21,7 +21,7 @@ const collisionBoxes=[], carriedVisuals=[];
 // Circumscribed chassis radius keeps corners clear even while turning.
 const ROBOT_RADIUS=.85;
 const FIELD_SCALE=1.5; // whole field (walls, plates, tables, tints) scaled up; robots and collision radius unchanged
-const ROBOT_SCALE=.35; // visual size of every robot (yours and other players'); 1 = original
+const ROBOT_SCALE=.525; // visual size of every robot (yours and other players'); 1 = original
 let collisionStepLimit=.1;
 const motionForward=new THREE.Vector3(), motionDesired=new THREE.Vector3(), animationTarget=new THREE.Vector3();
 const up=new THREE.Vector3(0,1,0), cameraOffset=new THREE.Vector3(0,5.5,7.5);
