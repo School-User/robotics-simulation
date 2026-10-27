@@ -8,7 +8,7 @@ renderer.shadowMap.enabled = true; document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x9dc8df);
 const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 200);
 scene.add(new THREE.HemisphereLight(0xd9efff,0x334225,2.2)); const sun=new THREE.DirectionalLight(0xffffff,2.4);sun.position.set(8,14,5);sun.castShadow=true;scene.add(sun);
-Object.assign(sun.shadow.camera,{left:-20,right:20,top:20,bottom:-20});sun.shadow.camera.updateProjectionMatrix();sun.shadow.mapSize.set(2048,2048);sun.shadow.bias=-.0005;sun.shadow.normalBias=.03; // frustum covers the whole 4-quadrant field
+Object.assign(sun.shadow.camera,{left:-30,right:30,top:30,bottom:-30});sun.shadow.camera.updateProjectionMatrix();sun.shadow.mapSize.set(2048,2048);sun.shadow.bias=-.0005;sun.shadow.normalBias=.03; // frustum covers the whole 4-quadrant field
 const AERIAL=new URLSearchParams(location.search).has('aerial'); // ?aerial = fixed top-down camera over the whole field
 // Start menu: single player = one quadrant, no server; multiplayer = full field + room server. ?mode=solo|multi (or ?room/?ws) skips the menu.
 let mode='solo';
@@ -20,6 +20,7 @@ let floorBounds, fieldStructure, spawnRotation=0, driveSpeed=0;
 const collisionBoxes=[], carriedVisuals=[];
 // Circumscribed chassis radius keeps corners clear even while turning.
 const ROBOT_RADIUS=.85;
+const FIELD_SCALE=1.5; // whole field (walls, plates, tables, tints) scaled up; robots and collision radius unchanged
 const ROBOT_SCALE=.7; // visual size of every robot (yours and other players'); 1 = original
 let collisionStepLimit=.1;
 const motionForward=new THREE.Vector3(), motionDesired=new THREE.Vector3(), animationTarget=new THREE.Vector3();
@@ -42,8 +43,8 @@ function layoutPlatesAndCups(){
   const shift=(o,dx,dz)=>{const p=o.parent,a=p.worldToLocal(pos(o)),b=p.worldToLocal(pos(o).add(new THREE.Vector3(dx,0,dz)));o.position.add(b.sub(a));o.updateMatrixWorld(true);};
   const copy=(src,name)=>{let o=named[name];if(!o&&src){o=src.clone();o.name=name;src.parent.add(o);named[name]=o;}return o;};
   for(let i=0;i<PLATES;i++){const plate=copy(named.Plate_0,`Plate_${i}`),stem=copy(named.PlateStem_0,`PlateStem_${i}`);if(!plate)continue;
-    const c=center(plate),dx=8.6+(i%3)*.95-c.x,dz=zs*(.75+Math.floor(i/3)*.95)-c.z;shift(plate,dx,dz);if(stem)shift(stem,dx,dz);}
-  for(let i=0;i<CUPS;i++){const cup=copy(named.Cup_0,`Cup_${i}`);if(!cup)continue;const c=center(cup);shift(cup,8.6+(i%4)*.9-c.x,zs*(3.5+Math.floor(i/4)*.95)-c.z);}
+    const c=center(plate),dx=FIELD_SCALE*(8.6+(i%3)*.95)-c.x,dz=FIELD_SCALE*zs*(.75+Math.floor(i/3)*.95)-c.z;shift(plate,dx,dz);if(stem)shift(stem,dx,dz);}
+  for(let i=0;i<CUPS;i++){const cup=copy(named.Cup_0,`Cup_${i}`);if(!cup)continue;const c=center(cup);shift(cup,FIELD_SCALE*(8.6+(i%4)*.9)-c.x,FIELD_SCALE*zs*(3.5+Math.floor(i/4)*.95)-c.z);}
 }
 function setup(){
   // The single-quadrant CAD has fake closing walls at x/z=-1.3; they'd cut through the middle of the full field.
@@ -72,7 +73,7 @@ function setup(){
   marker=new THREE.Mesh(new THREE.TorusGeometry(.35,.025,8,24),new THREE.MeshBasicMaterial({color:0x00eaff})); marker.rotation.x=Math.PI/2; marker.visible=false;scene.add(marker);
   resetState(); ready=true;
 }
-loader.load('./field.glb',g=>{scene.add(g.scene);modeChosen.then(()=>{setup();if(mode==='multi')mirrorField(g.scene);})},undefined,e=>{ $('carry').textContent='Could not load field.glb — run a local web server.'; console.error(e); });
+loader.load('./field.glb',g=>{g.scene.scale.setScalar(FIELD_SCALE);scene.add(g.scene);modeChosen.then(()=>{setup();if(mode==='multi')mirrorField(g.scene);})},undefined,e=>{ $('carry').textContent='Could not load field.glb — run a local web server.'; console.error(e); });
 
 
 function mealType(){ if(!state.plate)return null; const a=state.plate.items, set=new Set(a), first=a[0], last=a.at(-1), non=new Set(a.filter(x=>x!=='grain'));
@@ -201,14 +202,14 @@ const tintQuadrants=()=>{for(const t of quadTints){const q=QS.findIndex(([x,z])=
 const cloneFor=q=>clones.get(`${QS[myQ][0]*QS[q][0]},${QS[myQ][1]*QS[q][1]}`);
 const toGlobal=(x,z)=>[QS[myQ][0]*x,QS[myQ][1]*z]; // its own inverse, so also global->local
 const mirrorRy=ry=>Math.atan2(Math.sin(ry)*QS[myQ][0],Math.cos(ry)*QS[myQ][1]);
-const tableGid=o=>{const p=pos(o),[gx,gz]=toGlobal(p.x,p.z);return (Math.round(gx/3)+1)*3+Math.round(gz/3)+1;}; // 0..8, same table for every player
+const tableGid=o=>{const p=pos(o),[gx,gz]=toGlobal(p.x,p.z);return (Math.round(gx/(3*FIELD_SCALE))+1)*3+Math.round(gz/(3*FIELD_SCALE))+1;}; // 0..8, same table for every player
 function mirrorField(src){
   for(const [cx,cz] of [[-1,1],[1,-1],[-1,-1]]){const c=src.clone(true);c.scale.x*=cx;c.scale.z*=cz;scene.add(c);clones.set(`${cx},${cz}`,c);}
   const rsa=[[named.RSA_Tile,1,1],...[...clones].map(([k,c])=>[c.getObjectByName('RSA_Tile'),...k.split(',').map(Number)])];
   for(const [o,cx,cz] of rsa)if(o){o.material=o.material.clone();quadTints.push({set:c=>o.material.color.set(c),cx,cz});}
   for(const cx of[1,-1])for(const cz of[1,-1]){ // translucent floor wash so each quadrant reads as its team colour
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(11.8,11.8),new THREE.MeshBasicMaterial({transparent:true,opacity:.28,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));
-    m.rotation.x=-Math.PI/2;m.position.set(cx*5.9,.02,cz*5.9);scene.add(m);quadTints.push({set:c=>m.material.color.set(c),cx,cz});}
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(11.8*FIELD_SCALE,11.8*FIELD_SCALE),new THREE.MeshBasicMaterial({transparent:true,opacity:.28,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));
+    m.rotation.x=-Math.PI/2;m.position.set(cx*5.9*FIELD_SCALE,.02,cz*5.9*FIELD_SCALE);scene.add(m);quadTints.push({set:c=>m.material.color.set(c),cx,cz});}
   tintQuadrants();
   scene.updateMatrixWorld(true);
   const all=[0,1,2,3].map(i=>named[`Table_${i}`]).filter(Boolean),seen=new Set();
