@@ -487,7 +487,8 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
   const ws=new WebSocket(`${url}/?room=${encodeURIComponent(room)}`);
   ws.onopen=()=>{mp={send:o=>ws.readyState===1&&ws.send(JSON.stringify(o)),
     claim:n=>new Promise(r=>{pending.set(n,r);mp.send({t:'claim',n});setTimeout(()=>pending.delete(n)&&r(false),1500);})};list.style.display='';};
-  ws.onclose=()=>{mp=null;list.style.display='none';[...peers.keys()].forEach(drop);for(const r of pending.values())r(false);pending.clear();};
+  ws.onclose=()=>{if(!mp)$('prompt').textContent='Multiplayer server unreachable (blocked or offline). Reload to retry.'; // never opened: say so instead of silently playing solo with no lobby
+    mp=null;list.style.display='none';[...peers.keys()].forEach(drop);for(const r of pending.values())r(false);pending.clear();};
   ws.onmessage=async e=>{const m=JSON.parse(e.data);
     if(m.t==='init'){room=m.room;myQ=m.q??0;lobbyUntil=performance.now()-m.elapsed*1000;tintQuadrants();while(!ready)await new Promise(r=>setTimeout(r,100));m.claims.forEach(applyTaken);hud();}
     else if(m.t==='lobby'){doRestart();waitMsg=LOBBY_MSG;lobbyUntil=performance.now()+m.in*1000;}
