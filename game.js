@@ -216,7 +216,7 @@ function mirrorField(src){
 const CLAIM=/^(Plate|Cup|Veg|Fruit|Dairy|Protein|Grain|Water|Table)_\d+$/;
 // Shared items (pickups, ingredients, dining tables) need the server's OK first: first claim wins.
 async function act(c){if(busy||performance.now()<lobbyUntil)return;const n=c.o.name;if(!mp||!CLAIM.test(n)){c.fn();return;}busy=true;try{if(await mp.claim(n.startsWith('Table_')?'Table_'+tableGid(c.o):myQ+':'+n)&&!state.ended)c.fn();}finally{busy=false;}}
-function restart(){if(mp){if(state.ended)mp.send({t:'reset'});}else doRestart();}
+function restart(){if(!mp)doRestart();} // multiplayer has no restart: rooms cycle on their own timer
 function doRestart(){
   if(!ready)return;
   state.taken.forEach(n=>{const o=named[n];if(o){o.visible=true;o.userData.hidden=false;}});
@@ -465,7 +465,7 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
 
 // Multiplayer client: WebSocket to server/server.mjs, which also serves this page (?room=NAME, ?ws=ws://host:port to override).
 // Falls back to solo play if the server is unreachable.
-(async function(){await modeChosen;if(mode!=='multi')return;
+(async function(){await modeChosen;if(mode!=='multi')return;$('again').style.display='none';
   let room=new URLSearchParams(location.search).get('room')||''; // empty = server auto-matchmakes into a public room
   try{if(!localStorage.getItem('uname')){const n=(prompt('Nickname?')||'').trim().slice(0,16);if(n)localStorage.setItem('uname',n);}}catch{}
   const MP=window.MP_SERVER,wsParam=new URLSearchParams(location.search).get('ws');

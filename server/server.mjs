@@ -39,7 +39,7 @@ wss.on('connection',(ws,req)=>{
     if(m.t==='p'&&[m.x,m.z,m.ry,m.score].every(Number.isFinite))others({t:'p',id,q,x:m.x,z:m.z,ry:m.ry,score:m.score,name:String(m.name||'').slice(0,16)});
     else if(m.t==='claim'&&CLAIM.test(m.n)){
       if(r.claims.has(m.n)||!r.live||Date.now()-r.start>MATCH*1000)send(ws,{t:'no',n:m.n});else{r.claims.add(m.n);send(ws,{t:'ok',n:m.n});others({t:'taken',n:m.n});}
-    }else if(m.t==='reset'&&Date.now()-r.start>MATCH*1000)newLobby(r);
+    }
   });
   ws.on('close',()=>{r.clients.delete(ws);others({t:'left',id});if(!r.clients.size)rooms.delete(room);});
 });
