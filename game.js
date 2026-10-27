@@ -470,7 +470,7 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
   try{if(!localStorage.getItem('uname')){const n=(prompt('Nickname?')||'').trim().slice(0,16);if(n)localStorage.setItem('uname',n);}}catch{}
   const MP=window.MP_SERVER,wsParam=new URLSearchParams(location.search).get('ws');
   const url=wsParam||MP||`${location.protocol==='https:'?'wss':'ws'}://${location.host}`; // MP_SERVER (index.html) when the page is hosted elsewhere, else the server that served the page
-  if(MP&&!wsParam){$('carry').textContent='Waking multiplayer server (up to a minute)…';try{await fetch(MP.replace(/^ws/,'http')+'/health',{mode:'no-cors',signal:AbortSignal.timeout(70000)});}catch{}} // Render free tier sleeps; /health wakes it before the socket opens
+  if(MP&&!wsParam){$('carry').textContent='Waking multiplayer server (up to a minute)…';try{await fetch(MP.replace(/^ws/,'http')+'/health',{mode:'no-cors',signal:AbortSignal.timeout(70000)});}catch{}} // /health first, so a sleeping host has time to wake before the socket opens
   const peers=new Map(), pending=new Map(), esc=s=>String(s).replace(/[<&]/g,'');
   const LOBBY_MSG='Waiting for players… match starts in ';let waitMsg=LOBBY_MSG;
   const name=()=>{try{return(localStorage.getItem('uname')||'').slice(0,16)||'Player';}catch{return'Player';}};
