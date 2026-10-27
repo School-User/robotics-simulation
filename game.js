@@ -69,6 +69,7 @@ function setup(){
   buildCollisionMap();
   for(const n of ['QCA_Tile','WarmingShelf','BalanceBuffetShelf','Table_0','Table_1','Table_2','Table_3']){
     if(named[n])named[n].userData.interactionBounds=new THREE.Box3().setFromObject(named[n]);
+    if(named[n]&&/^Table_/.test(n))tables.push(named[n]); // solo: the field's own tables (multi adds the mirrored ones in mirrorField)
   }
   marker=new THREE.Mesh(new THREE.TorusGeometry(.35,.025,8,24),new THREE.MeshBasicMaterial({color:0x00eaff})); marker.rotation.x=Math.PI/2; marker.visible=false;scene.add(marker);
   resetState(); ready=true;
@@ -212,7 +213,7 @@ function mirrorField(src){
     m.rotation.x=-Math.PI/2;m.position.set(cx*5.9*FIELD_SCALE,.02,cz*5.9*FIELD_SCALE);scene.add(m);quadTints.push({set:c=>m.material.color.set(c),cx,cz});}
   tintQuadrants();
   scene.updateMatrixWorld(true);
-  const all=[0,1,2,3].map(i=>named[`Table_${i}`]).filter(Boolean),seen=new Set();
+  const all=[],seen=new Set();
   clones.forEach(c=>c.traverse(o=>{if(/^Table_\d$/.test(o.name))all.push(o);}));
   for(const t of all){const p=pos(t),k=`${Math.round(p.x)},${Math.round(p.z)}`;if(seen.has(k))continue;seen.add(k);
     t.userData.interactionBounds=new THREE.Box3().setFromObject(t);tables.push(t);}
