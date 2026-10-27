@@ -10,6 +10,12 @@ To see the code for any version, open the [`history` branch commits](https://git
 
 | Date | Update | Built with | Status |
 |---|---|---|---|
+| Oct 26 | Multiplayer server moved from Render to a Google Cloud VM (e2-medium, us-central1) with HTTPS through Caddy. Load-tested with 20 simulated players across five rooms. | Claude Code (Haiku 5.5) | Live |
+| Oct 26 | Restart removed from multiplayer: R, gamepad B/Start and Play Again no longer reset a live room. Single player keeps restart. | Claude Code (Haiku 5.5) | Live |
+| Oct 26 | 8 plates and 8 cups per player, placed on each player's own side (replaces the Oct 1 layout). Match is 3 minutes in both modes. Single player timer shows 3:00; menu heading reads "Pick a Mode". | Claude Code (Haiku 5.5) | Live |
+| Oct 26 | Field 1.5x bigger; robots at 52.5% of original size; slower driving (forward 2, reverse 1.5). Collision radius unchanged. | Claude Code (Haiku 5.5) | Live |
+| Oct 26 | Fix: single player never offered the dining table score option. Tables are now registered in solo mode too. | Claude Code (Haiku 5.5) | Live |
+| Oct 26 | README rewritten for modes, controls, hosting and local run. Private repo archived; all work is now in this public repo. | Claude Code (Haiku 5.5) | Live |
 | Oct 13 | Anonymous visit counter: first visit asks Allow or Reject, and each choice is counted once. Allow also logs one anonymous row per play. | Claude Code (Sonnet 5.5) | Live |
 | Oct 1 | 9 plates and 6 cups (was 3 and 2), moved off the start tile to the open floor by the outer wall. In multiplayer they sit just across the line in the neighbouring quadrant; in single player, at the same spot inside the quadrant. | Claude Code (Opus 5.5) | Private repo |
 | Oct 1 | Multiplayer made ready to test: 15-second lobby before each match (no joining mid-match), match clock kept by the server so every player stays in sync, and a fix for a crash when joining while the field was still loading. | Claude Code (Opus 5.5) | Private repo |
