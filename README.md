@@ -1,6 +1,6 @@
 # Byte to Bite: Robotics Simulation
 
-A 3D browser game that recreates the 2026 BEST Robotics "Byte to Bite" field, built by the Rock Canyon High School team to practice driving and strategy before the real robot exists. Plain Three.js, no build step.
+A 3D browser game that recreates the 2026 BEST Robotics "Byte to Bite" field, built by Siddh Patel at the Rock Canyon High School team to practice driving and strategy before the real robot exists. Plain Three.js, no build step.
 
 **Play it:** https://school-user.github.io/robotics-simulation/
 
