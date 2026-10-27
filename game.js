@@ -20,7 +20,6 @@ let floorBounds, fieldStructure, spawnRotation=0, driveSpeed=0;
 const collisionBoxes=[], carriedVisuals=[];
 // Circumscribed chassis radius keeps corners clear even while turning.
 const ROBOT_RADIUS=.85;
-const ROBOT_SCALE=.7; // visual size of every robot (yours and other players'); 1 = original
 let collisionStepLimit=.1;
 const motionForward=new THREE.Vector3(), motionDesired=new THREE.Vector3(), animationTarget=new THREE.Vector3();
 const up=new THREE.Vector3(0,1,0), cameraOffset=new THREE.Vector3(0,5.5,7.5);
@@ -63,8 +62,6 @@ function setup(){
   robotVisual=named.Robot_Chassis;
   if(robotVisual){ robot.attach(robotVisual); if(arm && arm.parent!==robotVisual) robot.attach(arm); }
   else { const m=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:0xff4545}));robot.add(m); }
-  // Shrink the visible robot about its centre. Collision radius is unchanged on purpose: tune ROBOT_RADIUS separately if walls feel off.
-  [robotVisual,arm].forEach(o=>{if(o&&o.parent===robot){o.position.multiplyScalar(ROBOT_SCALE);o.scale.multiplyScalar(ROBOT_SCALE);}});
   buildCollisionMap();
   for(const n of ['QCA_Tile','WarmingShelf','BalanceBuffetShelf','Table_0','Table_1','Table_2','Table_3']){
     if(named[n])named[n].userData.interactionBounds=new THREE.Box3().setFromObject(named[n]);
@@ -491,7 +488,7 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
     else if(m.t==='lobby'){doRestart();waitMsg=LOBBY_MSG;lobbyUntil=performance.now()+m.in*1000;}
     else if(m.t==='busy'){waitMsg=`Room ${esc(room)} is mid-match. Joining the next round in `;lobbyUntil=performance.now()+m.wait*1000;setTimeout(()=>location.reload(),m.wait*1000+1000);}
     else if(m.t==='p'&&ready){let o=peers.get(m.id); // poses before the field loads would hit an undefined robot
-      if(!o){const col=QCOL[m.q]||'#ff8800',mesh=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:new THREE.Color(col)}));mesh.scale.setScalar(ROBOT_SCALE);
+      if(!o){const col=QCOL[m.q]||'#ff8800',mesh=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:new THREE.Color(col)}));
         const[lx,lz]=toGlobal(m.x,m.z);mesh.position.set(lx,robot.position.y,lz);scene.add(mesh);others.push(mesh);o={mesh,col};peers.set(m.id,o);}
       const[px,pz]=toGlobal(m.x,m.z);Object.assign(o,{x:px,z:pz,ry:mirrorRy(m.ry),name:m.name,score:m.score,seen:performance.now()});}
     else if(m.t==='left')drop(m.id);
