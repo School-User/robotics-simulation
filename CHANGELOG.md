@@ -10,6 +10,8 @@ To see the code for any version, open the [`history` branch commits](https://git
 
 | Date | Update | Built with | Status |
 |---|---|---|---|
+| Oct 28 | Dining tables block movement like walls, in single player and multiplayer. Reach for pressing E is unchanged. | freebuff (DeepSeek V4.1 Flash), reviewed by Claude Code (Haiku 5.5) | Live |
+| Oct 28 | Multiplayer disconnect notice: a dropped connection, a full room, or an unreachable server now shows a message that stays on screen. A stale lobby countdown is cleared on disconnect. | Claude Code (Haiku 5.5) | Live |
 | Oct 26 | Multiplayer server moved from Render to a Google Cloud VM (e2-medium, us-central1) with HTTPS through Caddy. Load-tested with 20 simulated players across five rooms. | Claude Code (Haiku 5.5) | Live |
 | Oct 26 | Restart removed from multiplayer: R, gamepad B/Start and Play Again no longer reset a live room. Single player keeps restart. | Claude Code (Haiku 5.5) | Live |
 | Oct 26 | 8 plates and 8 cups per player, placed on each player's own side (replaces the Oct 1 layout). Match is 3 minutes in both modes. Single player timer shows 3:00; menu heading reads "Pick a Mode". | Claude Code (Haiku 5.5) | Live |

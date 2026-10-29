@@ -71,6 +71,7 @@ function setup(){
     if(named[n])named[n].userData.interactionBounds=new THREE.Box3().setFromObject(named[n]);
     if(named[n]&&/^Table_/.test(n))tables.push(named[n]); // solo: the field's own tables (multi adds the mirrored ones in mirrorField)
   }
+  addTableCollision();
   marker=new THREE.Mesh(new THREE.TorusGeometry(.35,.025,8,24),new THREE.MeshBasicMaterial({color:0x00eaff})); marker.rotation.x=Math.PI/2; marker.visible=false;scene.add(marker);
   resetState(); ready=true;
 }
@@ -170,6 +171,9 @@ function buildCollisionMap(){
     }
   }
 }
+// Dining tables block driving like walls, with the same ROBOT_RADIUS padding applied in blocked().
+// Their interaction boxes already exist, so reuse them; call again after mirrorField() adds the clones.
+function addTableCollision(){for(const t of tables){const b=t.userData.interactionBounds;if(b)collisionBoxes.push(b.clone());}}
 function blocked(x,z){
   for(const o of others){const d=Math.hypot(x-o.position.x,z-o.position.z);if(d<1.1&&d<Math.hypot(robot.position.x-o.position.x,robot.position.z-o.position.z))return true;}
   for(const b of collisionBoxes)if(x>=b.min.x-ROBOT_RADIUS&&x<=b.max.x+ROBOT_RADIUS&&z>=b.min.z-ROBOT_RADIUS&&z<=b.max.z+ROBOT_RADIUS)return true;
@@ -217,6 +221,7 @@ function mirrorField(src){
   clones.forEach(c=>c.traverse(o=>{if(/^Table_\d$/.test(o.name))all.push(o);}));
   for(const t of all){const p=pos(t),k=`${Math.round(p.x)},${Math.round(p.z)}`;if(seen.has(k))continue;seen.add(k);
     t.userData.interactionBounds=new THREE.Box3().setFromObject(t);tables.push(t);}
+  addTableCollision(); // buildCollisionMap() already ran in setup(), before these clones existed
 }
 const CLAIM=/^(Plate|Cup|Veg|Fruit|Dairy|Protein|Grain|Water|Table)_\d+$/;
 // Shared items (pickups, ingredients, dining tables) need the server's OK first: first claim wins.
@@ -480,6 +485,8 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
   const LOBBY_MSG='Waiting for players… match starts in ';let waitMsg=LOBBY_MSG;
   const name=()=>{try{return(localStorage.getItem('uname')||'').slice(0,16)||'Player';}catch{return'Player';}};
   const list=document.createElement('div');list.className='card';list.style.cssText='position:absolute;top:18px;right:18px;min-width:150px;display:none';$('hud').append(list);
+  // Own element: #prompt and #carry are rewritten every frame, so a notice written there vanishes at once.
+  const note=document.createElement('div');note.className='card';note.style.cssText='position:absolute;top:18px;left:50%;transform:translateX(-50%);display:none;border-color:#ff8080';$('hud').append(note);let reason='';
   const applyTaken=n=>{if(!ready)return;if(n.startsWith('Table_')){state.tables.add(+n.slice(6));return;}
     const [q,name]=n.split(':'),root=+q===myQ?null:cloneFor(+q),hide=k=>{const o=root?root.getObjectByName(k):named[k];if(o){o.visible=false;o.userData.hidden=true;}};
     if(!root)state.taken.add(name);hide(name);if(name.startsWith('Plate_'))hide(name.replace('Plate_','PlateStem_'));};
@@ -487,8 +494,9 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
   const ws=new WebSocket(`${url}/?room=${encodeURIComponent(room)}`);
   ws.onopen=()=>{mp={send:o=>ws.readyState===1&&ws.send(JSON.stringify(o)),
     claim:n=>new Promise(r=>{pending.set(n,r);mp.send({t:'claim',n});setTimeout(()=>pending.delete(n)&&r(false),1500);})};list.style.display='';};
-  ws.onclose=()=>{if(!mp)$('prompt').textContent='Multiplayer server unreachable (blocked or offline). Reload to retry.'; // never opened: say so instead of silently playing solo with no lobby
-    mp=null;list.style.display='none';[...peers.keys()].forEach(drop);for(const r of pending.values())r(false);pending.clear();};
+  ws.onclose=()=>{const wasOpen=!!mp;
+    note.textContent=reason||(wasOpen?'Multiplayer disconnected. Playing solo, reload to rejoin.':'Multiplayer server unreachable (blocked or offline). Reload to retry.');note.style.display='';
+    mp=null;lobbyUntil=0;list.style.display='none';[...peers.keys()].forEach(drop);for(const r of pending.values())r(false);pending.clear();}; // lobbyUntil=0: HUD clears any stale "match starts in" text
   ws.onmessage=async e=>{const m=JSON.parse(e.data);
     if(m.t==='init'){room=m.room;myQ=m.q??0;lobbyUntil=performance.now()-m.elapsed*1000;tintQuadrants();while(!ready)await new Promise(r=>setTimeout(r,100));m.claims.forEach(applyTaken);hud();}
     else if(m.t==='lobby'){doRestart();waitMsg=LOBBY_MSG;lobbyUntil=performance.now()+m.in*1000;}
@@ -497,12 +505,13 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
       if(!o){const col=QCOL[m.q]||'#ff8800',mesh=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:new THREE.Color(col)}));mesh.scale.setScalar(ROBOT_SCALE);
         const[lx,lz]=toGlobal(m.x,m.z);mesh.position.set(lx,robot.position.y,lz);scene.add(mesh);others.push(mesh);o={mesh,col};peers.set(m.id,o);}
       const[px,pz]=toGlobal(m.x,m.z);Object.assign(o,{x:px,z:pz,ry:mirrorRy(m.ry),name:m.name,score:m.score,seen:performance.now()});}
+    else if(m.t==='full')reason='Room is full. Reload to try another.';
     else if(m.t==='left')drop(m.id);
     else if(m.t==='taken')applyTaken(m.n);
     else if(m.t==='start'){lobbyUntil=0;matchEnd=performance.now()+m.len*1000;}
     else if(m.t==='ok'||m.t==='no'){const r=pending.get(m.n);pending.delete(m.n);r?.(m.t==='ok');}};
   setInterval(()=>{if(ready&&mp){const[gx,gz]=toGlobal(robot.position.x,robot.position.z);mp.send({t:'p',name:name(),x:gx,z:gz,ry:mirrorRy(robot.rotation.y),score:state.score});}},100);
-  (function loop(){requestAnimationFrame(loop);const now=performance.now(),left=Math.ceil((lobbyUntil-now)/1000);if(left>0)$('prompt').textContent=waitMsg+left+'s';if(!mp)return;
+  (function loop(){requestAnimationFrame(loop);const now=performance.now();if(!mp)return;const left=Math.ceil((lobbyUntil-now)/1000);if(left>0)$('prompt').textContent=waitMsg+left+'s';
     for(const[k,o]of[...peers]){if(now-o.seen>3000){drop(k);continue;}
       o.mesh.position.x+=(o.x-o.mesh.position.x)*.25;o.mesh.position.z+=(o.z-o.mesh.position.z)*.25;o.mesh.position.y=robot.position.y;o.mesh.rotation.y=o.ry;}
     const rows=[{n:name()+' (you)',s:state?.score??0,c:QCOL[myQ]},...[...peers.values()].map(o=>({n:o.name,s:o.score,c:o.col}))].sort((a,b)=>b.s-a.s);
