@@ -10,6 +10,7 @@ To see the code for any version, open the [`history` branch commits](https://git
 
 | Date | Update | Built with | Status |
 |---|---|---|---|
+| Oct 30 | 10 of each Dairy, Protein, Grain and Veg per quadrant (was 3/3/3/6), in solo and multiplayer: Dairy, Protein and Grain are one stack per box sunk under the floor, so only the top 3 show and the stack rises as items are taken; Veg adds a second column and the Fridge and Breadbox tiles stay exactly as in the GLB. | freebuff (DeepSeek V4.1 Flash) | Local |
 | Oct 28 | Dining tables block movement like walls, in single player and multiplayer. Reach for pressing E is unchanged. | freebuff (DeepSeek V4.1 Flash), reviewed by Claude Code (Haiku 5.5) | Live |
 | Oct 28 | Multiplayer disconnect notice: a dropped connection, a full room, or an unreachable server now shows a message that stays on screen. A stale lobby countdown is cleared on disconnect. | Claude Code (Haiku 5.5) | Live |
 | Oct 26 | Multiplayer server moved from Render to a Google Cloud VM (e2-medium, us-central1) with HTTPS through Caddy. Load-tested with 20 simulated players across five rooms. | Claude Code (Haiku 5.5) | Live |

@@ -25,10 +25,12 @@ const ROBOT_SCALE=.525; // visual size of every robot (yours and other players')
 let collisionStepLimit=.1;
 const motionForward=new THREE.Vector3(), motionDesired=new THREE.Vector3(), animationTarget=new THREE.Vector3();
 const up=new THREE.Vector3(0,1,0), cameraOffset=new THREE.Vector3(0,5.5,7.5);
+const FOOD_COUNT=10; // of each Dairy/Protein/Grain/Veg per quadrant; the GLB ships 3/3/3/6, layoutFood() copies the rest
 const targetNames = ['RSA_Tile','DriverBox_Tile','QCA_Tile','Fridge','Breadbox','VegTray','FruitFrame','WaterStation','DronePost','Drone','IrrigationValve','WarmingShelf','BalanceBuffetShelf','Robot_Chassis','Robot_Arm'];
 for(let i=0;i<4;i++) targetNames.push(`Table_${i}`,`TableFiducial_${i}`);
-for(let i=0;i<3;i++) targetNames.push(`Plate_${i}`,`PlateStem_${i}`,`Dairy_${i}`,`Protein_${i}`,`Grain_${i}`);
-for(let i=0;i<8;i++) targetNames.push(`Cup_${i}`); for(let i=0;i<6;i++) targetNames.push(`Veg_${i}`,`Fruit_${i}`); for(let i=0;i<8;i++) targetNames.push(`Water_${i}`);
+for(let i=0;i<3;i++) targetNames.push(`Plate_${i}`,`PlateStem_${i}`);
+for(let i=0;i<FOOD_COUNT;i++) targetNames.push(`Dairy_${i}`,`Protein_${i}`,`Grain_${i}`,`Veg_${i}`);
+for(let i=0;i<8;i++) targetNames.push(`Cup_${i}`); for(let i=0;i<6;i++) targetNames.push(`Fruit_${i}`); for(let i=0;i<8;i++) targetNames.push(`Water_${i}`);
 const pos = o => { const v=new THREE.Vector3(); o.getWorldPosition(v); return v; };
 const label = s => s[0].toUpperCase()+s.slice(1);
 function resetState(){ state={score:0,time:180,ended:false,plate:null,cup:null,valve:false,drone:0,opened:{fridge:false,bread:false},taken:new Set(),tables:new Set(),bonuses:new Set(),breakdown:[]}; }
@@ -37,20 +39,62 @@ function hideObject(name){const o=named[name];if(o){o.visible=false; o.userData.
 // PLATES plates and CUPS cups per quadrant (8 each, 32 in the game; the GLB has 3 and 2, the rest are copies), in grids on the
 // open floor of the player's own quadrant around x≈9.3, z≈1.5. Solo and multi share this spot.
 const PLATES=8, CUPS=8;
+// Move a node by a world-space (dx,dz,dy) converted into its parent's space, so the field's own scaling is handled.
+const shift=(o,dx,dz,dy=0)=>{const p=o.parent,a=p.worldToLocal(pos(o)),b=p.worldToLocal(pos(o).add(new THREE.Vector3(dx,dy,dz)));o.position.add(b.sub(a));o.updateMatrixWorld(true);};
+// Copy a field node (named.X_0), rename it, keep it beside the original and register it.
+const copy=(src,name)=>{let o=named[name];if(!o&&src){o=src.clone();o.name=name;src.parent.add(o);named[name]=o;}return o;};
 function layoutPlatesAndCups(){
   scene.updateMatrixWorld(true);
   const zs=1, center=o=>new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
-  const shift=(o,dx,dz)=>{const p=o.parent,a=p.worldToLocal(pos(o)),b=p.worldToLocal(pos(o).add(new THREE.Vector3(dx,0,dz)));o.position.add(b.sub(a));o.updateMatrixWorld(true);};
-  const copy=(src,name)=>{let o=named[name];if(!o&&src){o=src.clone();o.name=name;src.parent.add(o);named[name]=o;}return o;};
   for(let i=0;i<PLATES;i++){const plate=copy(named.Plate_0,`Plate_${i}`),stem=copy(named.PlateStem_0,`PlateStem_${i}`);if(!plate)continue;
     const c=center(plate),dx=FIELD_SCALE*(8.6+(i%3)*.95)-c.x,dz=FIELD_SCALE*zs*(.75+Math.floor(i/3)*.95)-c.z;shift(plate,dx,dz);if(stem)shift(stem,dx,dz);}
   for(let i=0;i<CUPS;i++){const cup=copy(named.Cup_0,`Cup_${i}`);if(!cup)continue;const c=center(cup);shift(cup,FIELD_SCALE*(8.6+(i%4)*.9)-c.x,FIELD_SCALE*zs*(3.5+Math.floor(i/4)*.95)-c.z);}
+}
+// FOOD_COUNT of each ingredient, but the GLB ships a 3-high stack of Dairy/Protein/Grain and 6 Veg (2 columns x 3 levels).
+// Dairy/Protein/Grain become one tall stack per kind, sunk under the floor so only the top of it shows; Veg keeps two columns.
+const VEG_GAP=.05; // clear gap between the two Veg columns
+const FOOD_STACKS={Veg:6}; // Veg levels per column, unchanged: items 6..9 repeat column 1
+const foodStacks=[]; // one {Dairy:[nodes],Protein:[],Grain:[]} set per field copy: main field plus each mirrored quadrant
+// Stack the remaining Dairy/Protein/Grain items in index order, rank 0 sitting on the GLB's top item and every next item
+// one pitch lower. Taken items are skipped, so the pile rises as items are taken and the visible top stays full.
+function settleFood(){
+  for(const set of foodStacks)for(const kind in set){
+    let rank=0;
+    for(const o of set[kind]){const st=o&&o.userData.stack; if(!st||o.visible===false)continue;
+      o.position.set(st.x,st.y-rank*st.rise,st.z); rank++;}
+  }
+}
+function layoutFood(){
+  scene.updateMatrixWorld(true);
+  {const perStack=FOOD_STACKS.Veg, src=named.Veg_0; // Veg is unchanged: one extra column of the original slabs, no scaling
+   if(src){const step=new THREE.Box3().setFromObject(src).getSize(new THREE.Vector3()).x+VEG_GAP, base=pos(src), lvl1=named.Veg_1, rise=lvl1?pos(lvl1).y-base.y:0;
+    let first=0; while(named[`Veg_${first}`])first++;
+    for(let i=first;i<FOOD_COUNT;i++){
+      const stack=Math.floor(i/perStack), level=i%perStack, ref=named[`Veg_${level}`];
+      const o=copy(src,`Veg_${i}`); if(!o)continue; const from=pos(o), c=ref?pos(ref):base.clone().setY(base.y+rise*level);
+      shift(o,c.x-from.x+step*stack,c.z-from.z,c.y-from.y);}}}
+  // Dairy, Protein and Grain: 10 items in one vertical stack per kind at the x/z the GLB already uses for that kind, at
+  // its own scale. The pile's top stays exactly where the GLB's top item is, so nothing pokes out of the box, and the
+  // extra items continue straight down below the floor where nobody looks. Local positions, so it also holds in clones.
+  const set={Dairy:[],Protein:[],Grain:[]};
+  for(const kind in set){
+    const src=named[`${kind}_0`]; if(!src)continue;
+    let first=0; while(named[`${kind}_${first}`])first++; // copies come from _0, untouched
+    for(;first<FOOD_COUNT;first++)copy(src,`${kind}_${first}`);
+    for(let i=0;i<FOOD_COUNT;i++){const o=named[`${kind}_${i}`]; if(o)set[kind].push(o);}
+    const glb=set[kind].slice(0,3), top=glb.reduce((a,b)=>b.position.y>a.position.y?b:a,glb[0]);
+    const ys=[...new Set(glb.map(o=>o.position.y))].sort((a,b)=>b-a); // the GLB's own level heights
+    const stack={x:top.position.x,y:top.position.y,z:top.position.z,rise:ys.length>1?ys[0]-ys[1]:.1};
+    for(const o of set[kind])o.userData.stack=stack; // plain numbers: clone() JSON-copies userData
+  }
+  foodStacks.push(set); // the mirrored clones get their own set at the end of mirrorField()
 }
 function setup(){
   // The single-quadrant CAD has fake closing walls at x/z=-1.3; they'd cut through the middle of the full field.
   if(mode==='multi')scene.traverse(o=>{if(o.isMesh&&/^CloseWall/.test(o.material?.name||''))o.visible=false;});
   scene.traverse(o=>{if(o.name) named[o.name]=o; if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
   layoutPlatesAndCups();
+  layoutFood(); // after the plates so the field is already scaled and both layouts share copy()/shift()
   fieldStructure=named.FieldStructure;
   if(fieldStructure) fieldStructure.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=true;}});
   const missing=targetNames.filter(n=>!named[n]); if(missing.length) console.warn('Field objects not found:',missing.join(', '));
@@ -222,6 +266,9 @@ function mirrorField(src){
   for(const t of all){const p=pos(t),k=`${Math.round(p.x)},${Math.round(p.z)}`;if(seen.has(k))continue;seen.add(k);
     t.userData.interactionBounds=new THREE.Box3().setFromObject(t);tables.push(t);}
   addTableCollision(); // buildCollisionMap() already ran in setup(), before these clones existed
+  for(const c of clones.values()){const set={Dairy:[],Protein:[],Grain:[]}; // look each item up once, not every frame
+    for(const kind in set)for(let i=0;i<FOOD_COUNT;i++){const o=c.getObjectByName(`${kind}_${i}`); if(o)set[kind].push(o);}
+    foodStacks.push(set);}
 }
 const CLAIM=/^(Plate|Cup|Veg|Fruit|Dairy|Protein|Grain|Water|Table)_\d+$/;
 // Shared items (pickups, ingredients, dining tables) need the server's OK first: first claim wins.
@@ -432,7 +479,8 @@ function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();pollGamepad()
     const acx=floorBounds&&mode!=='multi'?(floorBounds.minX+floorBounds.maxX)/2:0, acz=floorBounds&&mode!=='multi'?(floorBounds.minZ+floorBounds.maxZ)/2:.01;
     camera.position.set(acx,29,acz);camera.lookAt(acx,0,acz);
   }else{camera.position.lerp(desired,1-Math.exp(-8*dt));camera.lookAt(look);}
-}renderer.render(scene,camera);} tick();
+}if(ready)settleFood(); // re-stack the Dairy/Protein/Grain piles after anything was taken
+renderer.render(scene,camera);} tick();
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 
 // VEX controller bridge: maps live joystick/button state (from controller_bridge.py)
