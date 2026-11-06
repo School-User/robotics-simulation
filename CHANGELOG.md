@@ -10,6 +10,7 @@ To see the code for any version, open the [`history` branch commits](https://git
 
 | Date | Update | Built with | Status |
 |---|---|---|---|
+| Nov 6 | Lower GPU use: frame rate cap (30/60/Max, default 60), no drawing behind the start menu or results screen, 15 fps when the window is unfocused, shadows refreshed every other frame, Auto graphics quality (new default), High capped at 1.5x resolution. FPS counter now shows rendered frames. Branch `perf`, not merged. | Claude Code (Sonnet 5.5) | Local |
 | Nov 6 | Scores doubled: every point award is multiplied by `SCORE_MULT` (2) so scores can go past 300. Practice scores no longer match the official BEST rubric; set it to 1 to restore official values. Older leaderboard entries were scored under the old rules. | Claude Code (Sonnet 5.5) | Live |
 | Nov 6 | Settings menu (gear button or Esc): graphics quality Low/Medium/High (resolution scale and shadow quality), minimap on/off, FPS counter. Saved in the browser. Start-menu robot preview. Branch `graphics`, not merged. | Claude Code (Sonnet 5.5) | Local |
 | Nov 6 | Robot models: primitive-built robot replaces the GLB placeholder, with a start-menu picker for 4 designs (Scout, Tank, Rover, Hover). Cosmetic only, same footprint and collision. Choice is saved in the browser; multiplayer relays it, but the server needs a redeploy for others to see it. Branch `graphics`, not merged. | Claude Code (Sonnet 5.5) | Local |

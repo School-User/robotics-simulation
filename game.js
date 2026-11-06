@@ -5,7 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 const $ = id => document.getElementById(id);
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate = false; // tick() refreshes it, every other frame when fast
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = .7; document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x9dc8df);
 {const pm=new THREE.PMREMGenerator(renderer); scene.environment=pm.fromScene(new RoomEnvironment(),.04).texture; pm.dispose();} // soft studio fill + specular for the PBR field materials
@@ -81,24 +81,27 @@ let showPreview=()=>{};
   let rig;showPreview=i=>{if(rig){ps.remove(rig);}rig=makeRobot(0x2f7dd1,i);ps.add(rig);};showPreview(MODEL);
   const spin=()=>{if(!$('menu').classList.contains('show')){pr.dispose();return;}rig.rotation.y+=.012;pr.render(ps,pcam);requestAnimationFrame(spin);};spin();}
 // Settings (gear button / Esc): graphics quality, minimap, FPS counter. Saved in the browser.
-{const Q={low:[1,0],medium:[1.5,1024],high:[2,2048]}, S={q:'high',map:true,fps:false};
+// perf: render pacing + Auto quality, shared with tick(). cap = max render fps (0 = every display frame); lvl = Auto's current level (0 low..2 high).
+const perf={cap:60,auto:true,lvl:2,lastR:0,sum:0,n:0,frame:0,apply:()=>{}};
+{const LV=['low','medium','high'], Q={low:[1,0],medium:[1.25,1024],high:[1.5,2048]}, S={q:'auto',cap:60,map:true,fps:false};
   try{Object.assign(S,JSON.parse(localStorage.getItem('settings')||'{}'));}catch{}
-  if(!Q[S.q])S.q='high';
+  if(S.q!=='auto'&&!Q[S.q])S.q='auto';if(![0,30,60].includes(S.cap))S.cap=60;
   const panel=$('settings'), fpsEl=$('fps'), mapCss=document.head.appendChild(document.createElement('style'));
-  let frames=0,last=performance.now(),raf=0;
-  const fpsLoop=()=>{frames++;const t=performance.now();if(t-last>=500){fpsEl.textContent=Math.round(frames*1000/(t-last))+' FPS';frames=0;last=t;}raf=requestAnimationFrame(fpsLoop);};
-  const apply=()=>{const[pr,sh]=Q[S.q];renderer.setPixelRatio(Math.min(devicePixelRatio,pr));renderer.setSize(innerWidth,innerHeight);
+  let frames=0,last=performance.now(),raf=0; // frames = perf.frame at the last sample, so this shows frames actually RENDERED, not display refresh
+  const fpsLoop=()=>{const t=performance.now();if(t-last>=500){fpsEl.textContent=Math.round((perf.frame-frames)*1000/(t-last))+' FPS';frames=perf.frame;last=t;}raf=requestAnimationFrame(fpsLoop);};
+  const apply=()=>{perf.cap=S.cap;perf.auto=S.q==='auto';perf.sum=perf.n=0;const[pr,sh]=Q[perf.auto?LV[perf.lvl]:S.q];renderer.setPixelRatio(Math.min(devicePixelRatio,pr));renderer.setSize(innerWidth,innerHeight);
     sun.castShadow=!!sh;if(sh){sun.shadow.mapSize.set(sh,sh);sun.shadow.map?.dispose();sun.shadow.map=null;}
     mapCss.textContent=S.map?'':'#minimap{display:none!important}';
-    cancelAnimationFrame(raf);fpsEl.style.display=S.fps?'block':'none';if(S.fps){frames=0;last=performance.now();fpsLoop();}
-    document.querySelectorAll('#sq button').forEach(b=>b.classList.toggle('sel',b.dataset.q===S.q));$('smap').checked=S.map;$('sfps').checked=S.fps;
+    cancelAnimationFrame(raf);fpsEl.style.display=S.fps?'block':'none';if(S.fps){frames=perf.frame;last=performance.now();fpsLoop();}
+    document.querySelectorAll('#sq button').forEach(b=>b.classList.toggle('sel',b.dataset.q===S.q));document.querySelectorAll('#scap button').forEach(b=>b.classList.toggle('sel',+b.dataset.c===S.cap));$('smap').checked=S.map;$('sfps').checked=S.fps;
     try{localStorage.setItem('settings',JSON.stringify(S));}catch{}};
-  document.querySelectorAll('#sq button').forEach(b=>b.onclick=()=>{S.q=b.dataset.q;apply();});
+  document.querySelectorAll('#sq button').forEach(b=>b.onclick=()=>{S.q=b.dataset.q;if(S.q==='auto')perf.lvl=2;apply();});
+  document.querySelectorAll('#scap button').forEach(b=>b.onclick=()=>{S.cap=+b.dataset.c;apply();});
   $('smap').onchange=e=>{S.map=e.target.checked;apply();};$('sfps').onchange=e=>{S.fps=e.target.checked;apply();};
   const toggle=on=>{panel.classList.toggle('show',on);document.activeElement?.blur();};
   $('gear').onclick=()=>toggle(!panel.classList.contains('show'));$('sclose').onclick=()=>toggle(false);
   addEventListener('keydown',e=>{if(e.code==='Escape')toggle(!panel.classList.contains('show'));});
-  apply();}
+  perf.apply=apply;apply();}
 let collisionStepLimit=.1;
 const motionForward=new THREE.Vector3(), motionDesired=new THREE.Vector3(), animationTarget=new THREE.Vector3();
 const up=new THREE.Vector3(0,1,0), cameraOffset=new THREE.Vector3(0,5.5,7.5);
@@ -358,7 +361,8 @@ function doRestart(){
   const start=named.RSA_Tile;robot.position.copy(start?pos(start):new THREE.Vector3());robot.position.y+=.12;robot.rotation.y=spawnRotation;
   $('score').textContent='0';$('results').classList.remove('show');hud();
 }
-function hud(c){const total=Math.ceil(state.time);$('timer').textContent=`${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`; const plate=state.plate?state.plate.items.map(label).join(' → ')||'empty':'none';const cup=state.cup?(state.cup.water?`filled (${state.cup.water})`:'empty'):'none';$('carry').innerHTML=`<b>PLATE:</b> ${plate}<br><b>CUP:</b> ${cup}<br><span class="muted">WASD / arrows drive · E interact · R restart</span>`;$('prompt').textContent=c?.text||'';marker.visible=!!c;if(c)marker.position.copy(pos(c.o)).add(new THREE.Vector3(0,.18,0));}
+const hudSeen={}, hudPut=(id,prop,v)=>{if(hudSeen[id+prop]!==v){hudSeen[id+prop]=v;$(id)[prop]=v;}}; // skip DOM writes when nothing changed
+function hud(c){const total=Math.ceil(state.time);hudPut('timer','textContent',`${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`); const plate=state.plate?state.plate.items.map(label).join(' → ')||'empty':'none';const cup=state.cup?(state.cup.water?`filled (${state.cup.water})`:'empty'):'none';hudPut('carry','innerHTML',`<b>PLATE:</b> ${plate}<br><b>CUP:</b> ${cup}<br><span class="muted">WASD / arrows drive · E interact · R restart</span>`);$('prompt').textContent=c?.text||'';marker.visible=!!c;if(c)marker.position.copy(pos(c.o)).add(new THREE.Vector3(0,.18,0));}
 addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(e.repeat)return;keys[e.code]=true;if(e.code==='KeyR')restart();if(e.code==='KeyE'&&ready&&!state.ended){const c=objectCandidates()[0];if(c)act(c);}});
 addEventListener('keyup',e=>{if(e.target.tagName==='INPUT')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();keys[e.code]=false;});addEventListener('blur',()=>{keys={};driveSpeed=0;});$('again').onclick=restart;
 let minimapCtx;
@@ -542,7 +546,11 @@ function pollGamepad() {
   gpPrevB = bPressed;
   gpPrevStart = startPressed;
 }
-function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();pollGamepad();const dt=Math.min(clock.getDelta(),.05);if(ready&&!state.ended&&performance.now()>=lobbyUntil){
+function tick(){requestAnimationFrame(tick);
+  // Pacing: no drawing behind the start menu / results (they cover the scene), 15 fps when unfocused, else perf.cap. Game logic still runs every frame.
+  const now=performance.now(), focused=document.hasFocus(), covered=$('menu').classList.contains('show')||$('results').classList.contains('show'),
+    cap=focused?perf.cap:15, draw=!covered&&(!cap||now-perf.lastR>=1000/cap-2);
+  if(draw&&ready)drawMinimap();pollGamepad();const dt=Math.min(clock.getDelta(),.05);if(ready&&!state.ended&&performance.now()>=lobbyUntil){
   const turn=(keys.KeyA||keys.ArrowLeft?1:0)-(keys.KeyD||keys.ArrowRight?1:0);robot.rotation.y+=turn*3*dt;
   const input=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0), target=input>0?2:input<0?-1.5:0;
   driveSpeed=THREE.MathUtils.damp(driveSpeed,target,input?16:20,dt);if(Math.abs(driveSpeed)<.01)driveSpeed=0;moveRobot(driveSpeed*dt);
@@ -555,7 +563,13 @@ function tick(){requestAnimationFrame(tick);if(ready)drawMinimap();pollGamepad()
     camera.position.set(acx,29,acz);camera.lookAt(acx,0,acz);
   }else{camera.position.lerp(desired,1-Math.exp(-8*dt));camera.lookAt(look);}
 }if(ready)settleFood(); // re-stack the Dairy/Protein/Grain piles after anything was taken
-renderer.render(scene,camera);} tick();
+if(!draw)return;
+  const ft=now-perf.lastR;perf.lastR=now;perf.frame++;
+  renderer.shadowMap.needsUpdate=ft>25||(perf.frame&1)===0; // static sun: half-rate shadow pass once we are above ~40 fps
+  renderer.render(scene,camera);
+  // Auto quality: if the last 90 frames could not keep up with the target, drop one level (never raises again until reselected).
+  if(perf.auto&&focused&&ft<250){perf.sum+=ft;if(++perf.n>=90){const target=1000/Math.min(perf.cap||60,60);if(perf.sum/perf.n>target*1.35&&perf.lvl>0){perf.lvl--;perf.apply();}perf.sum=perf.n=0;}}
+} tick();
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 
 // VEX controller bridge: maps live joystick/button state (from controller_bridge.py)

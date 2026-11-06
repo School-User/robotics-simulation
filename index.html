@@ -23,7 +23,8 @@
   <button id="gear" title="Settings" aria-label="Settings">⚙︎</button><div id="fps"></div>
   <div id="menu" class="show"><div class="panel"><h1>Byte to Bite</h1><div class="muted">Pick a Robot</div><canvas id="prev" style="width:100%;height:150px;display:block;margin:8px 0 10px;border-radius:10px;background:#07111b"></canvas><div id="bots" class="modes bots"></div><div class="muted" style="margin-top:16px">Pick a Mode</div><div class="modes"><button id="solo" class="mode"><b>Single Player</b><span>One quadrant, just you. Practice a 3:00 run at your own pace.</span></button><button id="multi" class="mode"><b>Multiplayer</b><span>Full 4-quadrant field with up to 4 players. Joins a public room automatically.</span></button></div></div></div>
   <div id="settings"><div class="panel"><h1>Settings</h1>
-    <div class="set"><span>Graphics quality<br><span class="muted" style="font-size:12px">Low is fastest on slow laptops</span></span><div class="seg" id="sq"><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div></div>
+    <div class="set"><span>Graphics quality<br><span class="muted" style="font-size:12px">Low is fastest on slow laptops</span></span><div class="seg" id="sq"><button data-q="auto">Auto</button><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div></div>
+    <div class="set"><span>Frame rate cap<br><span class="muted" style="font-size:12px">Lower uses less GPU and battery</span></span><div class="seg" id="scap"><button data-c="30">30</button><button data-c="60">60</button><button data-c="0">Max</button></div></div>
     <label class="set"><span>Show minimap</span><input type="checkbox" id="smap"></label>
     <label class="set"><span>Show FPS counter</span><input type="checkbox" id="sfps"></label>
     <button id="sclose">Close (Esc)</button></div></div>
