@@ -10,6 +10,7 @@ To see the code for any version, open the [`history` branch commits](https://git
 
 | Date | Update | Built with | Status |
 |---|---|---|---|
+| Nov 6 | Scores doubled: every point award is multiplied by `SCORE_MULT` (2) so scores can go past 300. Practice scores no longer match the official BEST rubric; set it to 1 to restore official values. Older leaderboard entries were scored under the old rules. | Claude Code (Sonnet 5.5) | Live |
 | Nov 6 | Settings menu (gear button or Esc): graphics quality Low/Medium/High (resolution scale and shadow quality), minimap on/off, FPS counter. Saved in the browser. Start-menu robot preview. Branch `graphics`, not merged. | Claude Code (Sonnet 5.5) | Local |
 | Nov 6 | Robot models: primitive-built robot replaces the GLB placeholder, with a start-menu picker for 4 designs (Scout, Tank, Rover, Hover). Cosmetic only, same footprint and collision. Choice is saved in the browser; multiplayer relays it, but the server needs a redeploy for others to see it. Branch `graphics`, not merged. | Claude Code (Sonnet 5.5) | Local |
 | Nov 6 | Graphics pass: ACES tone mapping, soft studio environment lighting (RoomEnvironment), soft shadow edges, hemisphere light cut from 2.2 to 0.35 so the white floor no longer blows out. Branch `graphics`, not merged. Frame rate on school laptops untested. | Claude Code (Sonnet 5.5) | Local |
