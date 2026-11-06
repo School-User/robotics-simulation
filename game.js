@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const $ = id => document.getElementById(id);
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true; document.body.prepend(renderer.domElement);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = .7; document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x9dc8df);
+{const pm=new THREE.PMREMGenerator(renderer); scene.environment=pm.fromScene(new RoomEnvironment(),.04).texture; pm.dispose();} // soft studio fill + specular for the PBR field materials
 const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 200);
-scene.add(new THREE.HemisphereLight(0xd9efff,0x334225,2.2)); const sun=new THREE.DirectionalLight(0xffffff,2.4);sun.position.set(8,14,5);sun.castShadow=true;scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xd9efff,0x334225,.35)); const sun=new THREE.DirectionalLight(0xffffff,2.4);sun.position.set(8,14,5);sun.castShadow=true;scene.add(sun);
 Object.assign(sun.shadow.camera,{left:-30,right:30,top:30,bottom:-30});sun.shadow.camera.updateProjectionMatrix();sun.shadow.mapSize.set(2048,2048);sun.shadow.bias=-.0005;sun.shadow.normalBias=.03; // frustum covers the whole 4-quadrant field
 const AERIAL=new URLSearchParams(location.search).has('aerial'); // ?aerial = fixed top-down camera over the whole field
 // Start menu: single player = one quadrant, no server; multiplayer = full field + room server. ?mode=solo|multi (or ?room/?ws) skips the menu.
@@ -21,7 +24,81 @@ const collisionBoxes=[], carriedVisuals=[];
 // Circumscribed chassis radius keeps corners clear even while turning.
 const ROBOT_RADIUS=.85;
 const FIELD_SCALE=1.5; // whole field (walls, plates, tables, tints) scaled up; robots and collision radius unchanged
-const ROBOT_SCALE=.525; // visual size of every robot (yours and other players'); 1 = original
+// Robots built from primitives. All share one footprint (~.95 wide, arm out front) so collision and carry offsets are
+// identical: the choice is cosmetic. Faces local -Z; origin at the floor. g.userData.shell is the team-tinted part.
+const ROBOTS=[['Scout','4 wheels, grabber arm'],['Tank','Treads and a plow blade'],['Rover','6 wheels, camera mast'],['Hover','Hovercraft, twin thrusters']];
+let MODEL=0;try{MODEL=+(new URLSearchParams(location.search).get('robot')??localStorage.getItem('robot'))||0;}catch{}
+if(!(MODEL>=0&&MODEL<ROBOTS.length))MODEL=0;
+function makeRobot(color,model=0){
+  const g=new THREE.Group(), M=(c,r=.5,m=0)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m});
+  const add=(geo,mat,x,y,z,rx=0,rz=0)=>{const o=new THREE.Mesh(geo,mat);o.position.set(x,y,z);o.rotation.set(rx,0,rz);o.castShadow=o.receiveShadow=true;g.add(o);return o;};
+  const dark=M(0x2b3036,.6,.4), rubber=M(0x15171a,.9), steel=M(0xaab2ba,.35,.8), glow=new THREE.MeshBasicMaterial({color:0x7fe8ff,toneMapped:false});
+  const C=(r,h,seg=16)=>new THREE.CylinderGeometry(r,r,h,seg), B=(x,y,z)=>new THREE.BoxGeometry(x,y,z);
+  const body=(geo,y,z=0)=>g.userData.shell=add(geo,M(color,.35,.1),0,y,z);
+  const wheel=(x,y,z,r)=>{add(C(r,.13,20),rubber,x,y,z,0,Math.PI/2);add(C(r*.42,.14,12),steel,x,y,z,0,Math.PI/2);};
+  const fingers=(y,z)=>{for(const sx of[-1,1])add(B(.035,.08,.16),steel,sx*.075,y,z);};
+  if(model===1){ // Tank: treads, low hull, turret, plow blade
+    for(const sx of[-1,1]){add(B(.22,.22,.94),rubber,sx*.39,.11,0);for(const z of[-.3,-.1,.1,.3])add(C(.09,.02,12),steel,sx*.51,.11,z,0,Math.PI/2);}
+    body(B(.58,.16,.78),.3);
+    add(C(.2,.1,20),dark,0,.43,.1);
+    add(B(.1,.1,.5),steel,0,.43,-.4); fingers(.43,-.7);
+    add(B(.82,.16,.04),steel,0,.14,-.5,.35,0);
+    add(B(.3,.03,.02),glow,0,.32,-.4);
+  }else if(model===2){ // Rover: 6 wheels, camera mast, solar panel, boom arm
+    for(const sx of[-1,1])for(const z of[-.32,0,.32])wheel(sx*.44,.15,z,.15);
+    body(B(.62,.18,.82),.3);
+    add(B(.6,.02,.4),M(0x1c3a6e,.2,.6),0,.405,.2);
+    add(C(.025,.5,8),steel,0,.65,.3); add(B(.2,.1,.1),dark,0,.92,.3); add(C(.03,.06,10),glow,0,.92,.24,Math.PI/2,0);
+    add(B(.1,.1,.5),steel,0,.42,-.5,.3,0); fingers(.33,-.76);
+  }else if(model===3){ // Hover: round puck on a skirt, underglow, thrusters, fork arm
+    add(C(.44,.02,32),glow,0,.07,0);
+    add(new THREE.TorusGeometry(.46,.06,8,32),dark,0,.13,0,Math.PI/2,0);
+    body(C(.45,.14,32),.24);
+    add(new THREE.SphereGeometry(.24,20,8,0,Math.PI*2,0,Math.PI/2),M(0x7fe8ff,.2,.1),0,.31,.05);
+    for(const sx of[-1,1]){add(C(.08,.22,12),steel,sx*.22,.4,.36);add(C(.07,.02,12),glow,sx*.22,.51,.36);}
+    for(const sx of[-1,1])add(B(.04,.05,.42),steel,sx*.12,.28,-.66);
+  }else{ // Scout: 4 wheels, top deck, sensor dome, antenna, grabber arm
+    add(B(.78,.1,.88),dark,0,.2,0);
+    body(B(.7,.14,.76),.31,.02);
+    add(B(.5,.05,.4),dark,0,.4,.1);
+    add(new THREE.SphereGeometry(.09,16,8,0,Math.PI*2,0,Math.PI/2),M(0x7fe8ff,.2,.1),0,.42,.1);
+    add(C(.012,.38,6),steel,-.26,.58,.28); add(B(.1,.07,.012),M(0xff4545,.6),-.21,.73,.28);
+    add(B(.46,.03,.02),glow,0,.31,-.375);
+    for(const sx of[-1,1])for(const sz of[-1,1])wheel(sx*.43,.17,sz*.29,.17);
+    add(B(.14,.1,.34),steel,0,.34,-.55); fingers(.34,-.76);
+  }
+  return g;
+}
+{const box=$('bots');ROBOTS.forEach(([n,d],i)=>{const b=document.createElement('button');b.className='mode'+(i===MODEL?' sel':'');b.innerHTML=`<b>${n}</b><span>${d}</span>`;
+  b.onclick=()=>{MODEL=i;try{localStorage.setItem('robot',i);}catch{}box.querySelectorAll('.mode').forEach((x,j)=>x.classList.toggle('sel',j===i));};box.append(b);
+  b.onmouseenter=b.onfocus=()=>showPreview(i);b.onmouseleave=b.onblur=()=>showPreview(MODEL);b.addEventListener('click',()=>showPreview(i));});}
+// Spinning preview of the hovered / selected robot in its own small renderer; stops (and frees the GL context) once the menu closes.
+let showPreview=()=>{};
+{const cv=$('prev'),pr=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true}),ps=new THREE.Scene(),pcam=new THREE.PerspectiveCamera(38,410/150,.1,20);
+  pr.setPixelRatio(Math.min(devicePixelRatio,2));pr.setSize(410,150,false);pr.toneMapping=THREE.ACESFilmicToneMapping;pr.toneMappingExposure=.8;
+  pcam.position.set(0,.9,2.3);pcam.lookAt(0,.42,0);
+  ps.add(new THREE.HemisphereLight(0xd9efff,0x445566,1.6));const pl=new THREE.DirectionalLight(0xffffff,2.2);pl.position.set(2,4,3);ps.add(pl);
+  let rig;showPreview=i=>{if(rig){ps.remove(rig);}rig=makeRobot(0x2f7dd1,i);ps.add(rig);};showPreview(MODEL);
+  const spin=()=>{if(!$('menu').classList.contains('show')){pr.dispose();return;}rig.rotation.y+=.012;pr.render(ps,pcam);requestAnimationFrame(spin);};spin();}
+// Settings (gear button / Esc): graphics quality, minimap, FPS counter. Saved in the browser.
+{const Q={low:[1,0],medium:[1.5,1024],high:[2,2048]}, S={q:'high',map:true,fps:false};
+  try{Object.assign(S,JSON.parse(localStorage.getItem('settings')||'{}'));}catch{}
+  if(!Q[S.q])S.q='high';
+  const panel=$('settings'), fpsEl=$('fps'), mapCss=document.head.appendChild(document.createElement('style'));
+  let frames=0,last=performance.now(),raf=0;
+  const fpsLoop=()=>{frames++;const t=performance.now();if(t-last>=500){fpsEl.textContent=Math.round(frames*1000/(t-last))+' FPS';frames=0;last=t;}raf=requestAnimationFrame(fpsLoop);};
+  const apply=()=>{const[pr,sh]=Q[S.q];renderer.setPixelRatio(Math.min(devicePixelRatio,pr));renderer.setSize(innerWidth,innerHeight);
+    sun.castShadow=!!sh;if(sh){sun.shadow.mapSize.set(sh,sh);sun.shadow.map?.dispose();sun.shadow.map=null;}
+    mapCss.textContent=S.map?'':'#minimap{display:none!important}';
+    cancelAnimationFrame(raf);fpsEl.style.display=S.fps?'block':'none';if(S.fps){frames=0;last=performance.now();fpsLoop();}
+    document.querySelectorAll('#sq button').forEach(b=>b.classList.toggle('sel',b.dataset.q===S.q));$('smap').checked=S.map;$('sfps').checked=S.fps;
+    try{localStorage.setItem('settings',JSON.stringify(S));}catch{}};
+  document.querySelectorAll('#sq button').forEach(b=>b.onclick=()=>{S.q=b.dataset.q;apply();});
+  $('smap').onchange=e=>{S.map=e.target.checked;apply();};$('sfps').onchange=e=>{S.fps=e.target.checked;apply();};
+  const toggle=on=>{panel.classList.toggle('show',on);document.activeElement?.blur();};
+  $('gear').onclick=()=>toggle(!panel.classList.contains('show'));$('sclose').onclick=()=>toggle(false);
+  addEventListener('keydown',e=>{if(e.code==='Escape')toggle(!panel.classList.contains('show'));});
+  apply();}
 let collisionStepLimit=.1;
 const motionForward=new THREE.Vector3(), motionDesired=new THREE.Vector3(), animationTarget=new THREE.Vector3();
 const up=new THREE.Vector3(0,1,0), cameraOffset=new THREE.Vector3(0,5.5,7.5);
@@ -105,18 +182,15 @@ function setup(){
   if(chassis&&arm){const front=pos(arm).sub(pos(chassis));front.y=0;if(front.lengthSq()>.0001)spawnRotation=Math.atan2(-front.x,-front.z);}
   else spawnRotation=Math.PI;
   robot.rotation.y=spawnRotation;
-  robotVisual=named.Robot_Chassis;
-  if(robotVisual){ robot.attach(robotVisual); if(arm && arm.parent!==robotVisual) robot.attach(arm); }
-  else { const m=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:0xff4545}));robot.add(m); }
-  // Shrink the visible robot about its centre. Collision radius is unchanged on purpose: tune ROBOT_RADIUS separately if walls feel off.
-  [robotVisual,arm].forEach(o=>{if(o&&o.parent===robot){o.position.multiplyScalar(ROBOT_SCALE);o.scale.multiplyScalar(ROBOT_SCALE);}});
+  for(const o of [chassis,arm])if(o)o.visible=false; // the GLB's placeholder robot; makeRobot() replaces it
+  robotVisual=makeRobot(0x2f7dd1,MODEL); robot.add(robotVisual); // collision radius is separate (ROBOT_RADIUS)
   buildCollisionMap();
   for(const n of ['QCA_Tile','WarmingShelf','BalanceBuffetShelf','Table_0','Table_1','Table_2','Table_3']){
     if(named[n])named[n].userData.interactionBounds=new THREE.Box3().setFromObject(named[n]);
     if(named[n]&&/^Table_/.test(n))tables.push(named[n]); // solo: the field's own tables (multi adds the mirrored ones in mirrorField)
   }
   addTableCollision();
-  marker=new THREE.Mesh(new THREE.TorusGeometry(.35,.025,8,24),new THREE.MeshBasicMaterial({color:0x00eaff})); marker.rotation.x=Math.PI/2; marker.visible=false;scene.add(marker);
+  marker=new THREE.Mesh(new THREE.TorusGeometry(.35,.025,8,24),new THREE.MeshBasicMaterial({color:0x00eaff,toneMapped:false})); marker.rotation.x=Math.PI/2; marker.visible=false;scene.add(marker);
   resetState(); ready=true;
 }
 loader.load('./field.glb',g=>{g.scene.scale.setScalar(FIELD_SCALE);scene.add(g.scene);modeChosen.then(()=>{setup();if(mode==='multi')mirrorField(g.scene);})},undefined,e=>{ $('carry').textContent='Could not load field.glb — run a local web server.'; console.error(e); });
@@ -247,7 +321,7 @@ const others=[]; let mp=null, busy=false, lobbyUntil=0, matchEnd=0; // multiplay
 const QS=[[1,1],[-1,1],[-1,-1],[1,-1]], QCOL=['#ff4545','#3b82ff','#ffd21f','#2ecc71'];
 let myQ=0; const clones=new Map(), tables=[], quadTints=[];
 // Local quadrant (cx,cz) -> global team colour; re-run once the server tells us which quadrant we own.
-const tintQuadrants=()=>{for(const t of quadTints){const q=QS.findIndex(([x,z])=>x===QS[myQ][0]*t.cx&&z===QS[myQ][1]*t.cz);t.set(QCOL[q]);}};
+const tintQuadrants=()=>{for(const t of quadTints){const q=QS.findIndex(([x,z])=>x===QS[myQ][0]*t.cx&&z===QS[myQ][1]*t.cz);t.set(QCOL[q]);}robotVisual?.userData.shell.material.color.set(QCOL[myQ]);};
 const cloneFor=q=>clones.get(`${QS[myQ][0]*QS[q][0]},${QS[myQ][1]*QS[q][1]}`);
 const toGlobal=(x,z)=>[QS[myQ][0]*x,QS[myQ][1]*z]; // its own inverse, so also global->local
 const mirrorRy=ry=>Math.atan2(Math.sin(ry)*QS[myQ][0],Math.cos(ry)*QS[myQ][1]);
@@ -257,7 +331,7 @@ function mirrorField(src){
   const rsa=[[named.RSA_Tile,1,1],...[...clones].map(([k,c])=>[c.getObjectByName('RSA_Tile'),...k.split(',').map(Number)])];
   for(const [o,cx,cz] of rsa)if(o){o.material=o.material.clone();quadTints.push({set:c=>o.material.color.set(c),cx,cz});}
   for(const cx of[1,-1])for(const cz of[1,-1]){ // translucent floor wash so each quadrant reads as its team colour
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(11.8*FIELD_SCALE,11.8*FIELD_SCALE),new THREE.MeshBasicMaterial({transparent:true,opacity:.28,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(11.8*FIELD_SCALE,11.8*FIELD_SCALE),new THREE.MeshBasicMaterial({toneMapped:false,transparent:true,opacity:.28,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));
     m.rotation.x=-Math.PI/2;m.position.set(cx*5.9*FIELD_SCALE,.02,cz*5.9*FIELD_SCALE);scene.add(m);quadTints.push({set:c=>m.material.color.set(c),cx,cz});}
   tintQuadrants();
   scene.updateMatrixWorld(true);
@@ -550,7 +624,7 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
     else if(m.t==='lobby'){doRestart();waitMsg=LOBBY_MSG;lobbyUntil=performance.now()+m.in*1000;}
     else if(m.t==='busy'){waitMsg=`Room ${esc(room)} is mid-match. Joining the next round in `;lobbyUntil=performance.now()+m.wait*1000;setTimeout(()=>location.reload(),m.wait*1000+1000);}
     else if(m.t==='p'&&ready){let o=peers.get(m.id); // poses before the field loads would hit an undefined robot
-      if(!o){const col=QCOL[m.q]||'#ff8800',mesh=new THREE.Mesh(new THREE.BoxGeometry(.55,.2,.7),new THREE.MeshStandardMaterial({color:new THREE.Color(col)}));mesh.scale.setScalar(ROBOT_SCALE);
+      if(!o){const col=QCOL[m.q]||'#ff8800',mesh=makeRobot(col,m.r>=0&&m.r<ROBOTS.length?m.r|0:0);
         const[lx,lz]=toGlobal(m.x,m.z);mesh.position.set(lx,robot.position.y,lz);scene.add(mesh);others.push(mesh);o={mesh,col};peers.set(m.id,o);}
       const[px,pz]=toGlobal(m.x,m.z);Object.assign(o,{x:px,z:pz,ry:mirrorRy(m.ry),name:m.name,score:m.score,seen:performance.now()});}
     else if(m.t==='full')reason='Room is full. Reload to try another.';
@@ -558,7 +632,7 @@ $('post').onclick=async()=>{const name=$('uname').value.trim();if(!name){$('lbms
     else if(m.t==='taken')applyTaken(m.n);
     else if(m.t==='start'){lobbyUntil=0;matchEnd=performance.now()+m.len*1000;}
     else if(m.t==='ok'||m.t==='no'){const r=pending.get(m.n);pending.delete(m.n);r?.(m.t==='ok');}};
-  setInterval(()=>{if(ready&&mp){const[gx,gz]=toGlobal(robot.position.x,robot.position.z);mp.send({t:'p',name:name(),x:gx,z:gz,ry:mirrorRy(robot.rotation.y),score:state.score});}},100);
+  setInterval(()=>{if(ready&&mp){const[gx,gz]=toGlobal(robot.position.x,robot.position.z);mp.send({t:'p',name:name(),x:gx,z:gz,ry:mirrorRy(robot.rotation.y),score:state.score,r:MODEL});}},100);
   (function loop(){requestAnimationFrame(loop);const now=performance.now();if(!mp)return;const left=Math.ceil((lobbyUntil-now)/1000);if(left>0)$('prompt').textContent=waitMsg+left+'s';
     for(const[k,o]of[...peers]){if(now-o.seen>3000){drop(k);continue;}
       o.mesh.position.x+=(o.x-o.mesh.position.x)*.25;o.mesh.position.z+=(o.z-o.mesh.position.z)*.25;o.mesh.position.y=robot.position.y;o.mesh.rotation.y=o.ry;}

@@ -10,6 +10,9 @@ To see the code for any version, open the [`history` branch commits](https://git
 
 | Date | Update | Built with | Status |
 |---|---|---|---|
+| Nov 6 | Settings menu (gear button or Esc): graphics quality Low/Medium/High (resolution scale and shadow quality), minimap on/off, FPS counter. Saved in the browser. Start-menu robot preview. Branch `graphics`, not merged. | Claude Code (Sonnet 5.5) | Local |
+| Nov 6 | Robot models: primitive-built robot replaces the GLB placeholder, with a start-menu picker for 4 designs (Scout, Tank, Rover, Hover). Cosmetic only, same footprint and collision. Choice is saved in the browser; multiplayer relays it, but the server needs a redeploy for others to see it. Branch `graphics`, not merged. | Claude Code (Sonnet 5.5) | Local |
+| Nov 6 | Graphics pass: ACES tone mapping, soft studio environment lighting (RoomEnvironment), soft shadow edges, hemisphere light cut from 2.2 to 0.35 so the white floor no longer blows out. Branch `graphics`, not merged. Frame rate on school laptops untested. | Claude Code (Sonnet 5.5) | Local |
 | Oct 30 | 10 of each Dairy, Protein, Grain and Veg per quadrant (was 3/3/3/6), in solo and multiplayer: Dairy, Protein and Grain are one stack per box sunk under the floor, so only the top 3 show and the stack rises as items are taken; Veg adds a second column and the Fridge and Breadbox tiles stay exactly as in the GLB. | freebuff (DeepSeek V4.1 Flash) | Local |
 | Oct 28 | Dining tables block movement like walls, in single player and multiplayer. Reach for pressing E is unchanged. | freebuff (DeepSeek V4.1 Flash), reviewed by Claude Code (Haiku 5.5) | Live |
 | Oct 28 | Multiplayer disconnect notice: a dropped connection, a full room, or an unreachable server now shows a message that stays on screen. A stale lobby countdown is cleared on disconnect. | Claude Code (Haiku 5.5) | Live |

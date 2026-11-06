@@ -36,7 +36,7 @@ wss.on('connection',(ws,req)=>{
   const others=o=>r.clients.forEach(c=>c!==ws&&send(c,o));
   send(ws,{t:'init',id,room,q,claims:[...r.claims],elapsed:(Date.now()-r.start)/1000});
   ws.on('message',d=>{let m;try{m=JSON.parse(d);}catch{return;}
-    if(m.t==='p'&&[m.x,m.z,m.ry,m.score].every(Number.isFinite))others({t:'p',id,q,x:m.x,z:m.z,ry:m.ry,score:m.score,name:String(m.name||'').slice(0,16)});
+    if(m.t==='p'&&[m.x,m.z,m.ry,m.score].every(Number.isFinite))others({t:'p',id,q,x:m.x,z:m.z,ry:m.ry,score:m.score,name:String(m.name||'').slice(0,16),r:Number.isInteger(m.r)&&m.r>=0&&m.r<9?m.r:0});
     else if(m.t==='claim'&&CLAIM.test(m.n)){
       if(r.claims.has(m.n)||!r.live||Date.now()-r.start>MATCH*1000)send(ws,{t:'no',n:m.n});else{r.claims.add(m.n);send(ws,{t:'ok',n:m.n});others({t:'taken',n:m.n});}
     }
