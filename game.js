@@ -111,7 +111,8 @@ for(let i=0;i<8;i++) targetNames.push(`Cup_${i}`); for(let i=0;i<6;i++) targetNa
 const pos = o => { const v=new THREE.Vector3(); o.getWorldPosition(v); return v; };
 const label = s => s[0].toUpperCase()+s.slice(1);
 function resetState(){ state={score:0,time:180,ended:false,plate:null,cup:null,valve:false,drone:0,opened:{fridge:false,bread:false},taken:new Set(),tables:new Set(),bonuses:new Set(),breakdown:[]}; }
-function addScore(points, why){ if(!points)return; state.score+=points; state.breakdown.push({points,why}); $('score').textContent=state.score; }
+const SCORE_MULT=2; // every point award (meals, drinks, bonuses) is multiplied by this; 1 = official BEST values
+function addScore(points, why){ if(!points)return; points*=SCORE_MULT; state.score+=points; state.breakdown.push({points,why}); $('score').textContent=state.score; }
 function hideObject(name){const o=named[name];if(o){o.visible=false; o.userData.hidden=true;}}
 // PLATES plates and CUPS cups per quadrant (8 each, 32 in the game; the GLB has 3 and 2, the rest are copies), in grids on the
 // open floor of the player's own quadrant around x≈9.3, z≈1.5. Solo and multi share this spot.
