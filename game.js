@@ -81,23 +81,38 @@ let showPreview=()=>{};
   let rig;showPreview=i=>{if(rig){ps.remove(rig);}rig=makeRobot(0x2f7dd1,i);ps.add(rig);};showPreview(MODEL);
   const spin=()=>{if(!$('menu').classList.contains('show')){pr.dispose();return;}rig.rotation.y+=.012;pr.render(ps,pcam);requestAnimationFrame(spin);};spin();}
 // Settings (gear button / Esc): graphics quality, minimap, FPS counter. Saved in the browser.
+// RTX mode = rasterised "ray-traced look" (not real RT): ambient occlusion + bloom + 4096 shadows + full pixel ratio. Off by default; costs a lot of GPU.
+async function setRTX(on){
+  if(!on){rtx=null;return;}
+  if(rtx)return;
+  try{
+    const[{EffectComposer},{RenderPass},{GTAOPass},{UnrealBloomPass},{OutputPass}]=await Promise.all(['EffectComposer','RenderPass','GTAOPass','UnrealBloomPass','OutputPass'].map(n=>import(`three/addons/postprocessing/${n}.js`)));
+    const c=new EffectComposer(renderer);c.setPixelRatio(renderer.getPixelRatio());c.setSize(innerWidth,innerHeight);
+    c.addPass(new RenderPass(scene,camera));
+    const ao=new GTAOPass(scene,camera,innerWidth,innerHeight);ao.output=GTAOPass.OUTPUT.Default;c.addPass(ao);
+    c.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.25,.6,.9));
+    c.addPass(new OutputPass());
+    if(document.getElementById('srtx').checked)rtx=c; // user may have toggled off while modules loaded
+  }catch(err){console.warn('RTX mode failed',err);document.getElementById('srtx').checked=false;}
+}
 // perf: render pacing + Auto quality, shared with tick(). cap = max render fps (0 = every display frame); lvl = Auto's current level (0 low..2 high).
+let rtx=null; // EffectComposer while RTX mode is on (lazy-loaded), else null
 const perf={cap:60,auto:true,lvl:2,lastR:0,sum:0,n:0,frame:0,apply:()=>{}};
-{const LV=['low','medium','high'], Q={low:[1,0],medium:[1.25,1024],high:[1.5,2048]}, S={q:'auto',cap:60,map:true,fps:false};
+{const LV=['low','medium','high'], Q={low:[1,0],medium:[1.25,1024],high:[1.5,2048]}, S={q:'auto',cap:60,map:true,fps:false,rtx:false};
   try{Object.assign(S,JSON.parse(localStorage.getItem('settings')||'{}'));}catch{}
   if(S.q!=='auto'&&!Q[S.q])S.q='auto';if(![0,30,60].includes(S.cap))S.cap=60;
   const panel=$('settings'), fpsEl=$('fps'), mapCss=document.head.appendChild(document.createElement('style'));
   let frames=0,last=performance.now(),raf=0; // frames = perf.frame at the last sample, so this shows frames actually RENDERED, not display refresh
   const fpsLoop=()=>{const t=performance.now();if(t-last>=500){fpsEl.textContent=Math.round((perf.frame-frames)*1000/(t-last))+' FPS';frames=perf.frame;last=t;}raf=requestAnimationFrame(fpsLoop);};
-  const apply=()=>{perf.cap=S.cap;perf.auto=S.q==='auto';perf.sum=perf.n=0;const[pr,sh]=Q[perf.auto?LV[perf.lvl]:S.q];renderer.setPixelRatio(Math.min(devicePixelRatio,pr));renderer.setSize(innerWidth,innerHeight);
+  const apply=()=>{perf.cap=S.cap;perf.auto=S.q==='auto'&&!S.rtx;perf.sum=perf.n=0;let[pr,sh]=Q[perf.auto?LV[perf.lvl]:S.q==='auto'?'high':S.q];if(S.rtx){pr=2;sh=4096;setRTX(true);}else setRTX(false);renderer.setPixelRatio(Math.min(devicePixelRatio,pr));renderer.setSize(innerWidth,innerHeight);
     sun.castShadow=!!sh;if(sh){sun.shadow.mapSize.set(sh,sh);sun.shadow.map?.dispose();sun.shadow.map=null;}
     mapCss.textContent=S.map?'':'#minimap{display:none!important}';
     cancelAnimationFrame(raf);fpsEl.style.display=S.fps?'block':'none';if(S.fps){frames=perf.frame;last=performance.now();fpsLoop();}
-    document.querySelectorAll('#sq button').forEach(b=>b.classList.toggle('sel',b.dataset.q===S.q));document.querySelectorAll('#scap button').forEach(b=>b.classList.toggle('sel',+b.dataset.c===S.cap));$('smap').checked=S.map;$('sfps').checked=S.fps;
+    document.querySelectorAll('#sq button').forEach(b=>b.classList.toggle('sel',b.dataset.q===S.q));document.querySelectorAll('#scap button').forEach(b=>b.classList.toggle('sel',+b.dataset.c===S.cap));$('smap').checked=S.map;$('srtx').checked=S.rtx;$('sfps').checked=S.fps;
     try{localStorage.setItem('settings',JSON.stringify(S));}catch{}};
   document.querySelectorAll('#sq button').forEach(b=>b.onclick=()=>{S.q=b.dataset.q;if(S.q==='auto')perf.lvl=2;apply();});
   document.querySelectorAll('#scap button').forEach(b=>b.onclick=()=>{S.cap=+b.dataset.c;apply();});
-  $('smap').onchange=e=>{S.map=e.target.checked;apply();};$('sfps').onchange=e=>{S.fps=e.target.checked;apply();};
+  $('srtx').onchange=e=>{S.rtx=e.target.checked;apply();};$('smap').onchange=e=>{S.map=e.target.checked;apply();};$('sfps').onchange=e=>{S.fps=e.target.checked;apply();};
   const toggle=on=>{panel.classList.toggle('show',on);document.activeElement?.blur();};
   $('gear').onclick=()=>toggle(!panel.classList.contains('show'));$('sclose').onclick=()=>toggle(false);
   addEventListener('keydown',e=>{if(e.code==='Escape')toggle(!panel.classList.contains('show'));});
@@ -566,11 +581,11 @@ function tick(){requestAnimationFrame(tick);
 if(!draw)return;
   const ft=now-perf.lastR;perf.lastR=now;perf.frame++;
   renderer.shadowMap.needsUpdate=ft>25||(perf.frame&1)===0; // static sun: half-rate shadow pass once we are above ~40 fps
-  renderer.render(scene,camera);
+  rtx?rtx.render():renderer.render(scene,camera);
   // Auto quality: if the last 90 frames could not keep up with the target, drop one level (never raises again until reselected).
   if(perf.auto&&focused&&ft<250){perf.sum+=ft;if(++perf.n>=90){const target=1000/Math.min(perf.cap||60,60);if(perf.sum/perf.n>target*1.35&&perf.lvl>0){perf.lvl--;perf.apply();}perf.sum=perf.n=0;}}
 } tick();
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);rtx?.setSize(innerWidth,innerHeight);});
 
 // VEX controller bridge: maps live joystick/button state (from controller_bridge.py)
 // onto the same `keys` object used by keyboard input, so all existing driving/
