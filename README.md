@@ -11,6 +11,18 @@ A 3D browser game that recreates the 2026 BEST Robotics "Byte to Bite" field, bu
 
 Each player gets 8 plates and 8 cups on their own side, 32 of each in the whole game.
 
+Every quadrant also has 10 each of Dairy, Protein, Grain and Veg. Every point award is doubled (`SCORE_MULT = 2` in `game.js`) so scores can go past 300; set it to 1 for the official BEST values. Dining tables block movement like walls.
+
+## Graphics and settings
+
+Open Settings with the gear button or Esc. Choices are saved in your browser.
+
+- **Graphics quality:** Auto (default, steps down if frames drop), Low, Medium or High.
+- **Frame rate cap:** 30, 60 or Max. The game also skips drawing behind the menu and when the tab is unfocused.
+- **RTX mode:** off by default. Adds ambient occlusion, bloom, 4096 shadow maps and full-resolution rendering for a ray-traced look. It is post-processing, not real ray tracing, and it needs a strong GPU.
+- **Minimap** and **FPS counter** toggles.
+- **Robots:** pick one of four designs (Scout, Tank, Rover, Hover) on the start menu. They are cosmetic; collision is the same for all.
+
 ## Controls
 
 | Action | Keyboard | Gamepad |
@@ -42,8 +54,8 @@ cd server && npm ci && node server.mjs   # http://localhost:8080
 ## How it's hosted
 
 - **The game** is on GitHub Pages, so players only need the link.
-- **Multiplayer** runs on a Google Cloud VM (e2-medium, us-central1) behind Caddy, which handles HTTPS. Pages connects to it over `wss://`.
-- Load-tested with 20 simulated players across five rooms; the server stayed well under its memory limit.
+- **Multiplayer** runs on Google Cloud Run (us-central1, one instance). Cloud Run scales to zero when idle, so the first player after a quiet spell may wait a few seconds. Pages connects over `wss://` to the `run.app` address, which school web filters let through (the earlier `sslip.io` address was blocked).
+- Load-tested with 20 simulated players across five rooms on the earlier Google Cloud VM host; the server stayed well under its memory limit.
 
 ## Files
 
