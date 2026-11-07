@@ -90,7 +90,7 @@ async function setRTX(on){
     const c=new EffectComposer(renderer);c.setPixelRatio(renderer.getPixelRatio());c.setSize(innerWidth,innerHeight);
     c.addPass(new RenderPass(scene,camera));
     const ao=new GTAOPass(scene,camera,innerWidth,innerHeight);ao.output=GTAOPass.OUTPUT.Default;c.addPass(ao);
-    c.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.25,.6,.9));
+    c.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.2,.4,2));// threshold is in linear HDR (pre-tonemap): the sunlit floor is >1, so .9 made the whole scene glow white
     c.addPass(new OutputPass());
     if(document.getElementById('srtx').checked)rtx=c; // user may have toggled off while modules loaded
   }catch(err){console.warn('RTX mode failed',err);document.getElementById('srtx').checked=false;}
