@@ -52,6 +52,9 @@ export function parseLine(line) {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Error codes shown on the page (listed in vex/README.md). The status becomes 'error: V03: ...'.
+const fail = (code, msg) => Object.assign(new Error(`${code}: ${msg}`), { code });
+const coded = e => e.code ? e.message : `V00: ${e.message}`;
 
 export const vex = {
   onState: () => {},            // called with every controller sample
@@ -98,13 +101,13 @@ export const vex = {
       try { await wr.write(frame(ecmd, payload)); } finally { wr.releaseLock(); }
       for (const end = Date.now() + timeout; ;) {
         const r = parseReply(w.buf);
-        if (r && r.ecmd === ecmd) { if (r.ack !== ACK) throw new Error(`Brain refused (0x${r.ack.toString(16)})`); return r.payload; }
+        if (r && r.ecmd === ecmd) { if (r.ack !== ACK) throw fail(`V04-${r.ack.toString(16)}`, 'The Brain refused the program. Update the Brain firmware in VEXcode and try again.'); return r.payload; }
         const left = end - Date.now();
         if (left <= 0) break;
         await new Promise(res => { w.wake = res; setTimeout(res, left); });
       }
     }
-    throw new Error('Brain did not answer');
+    throw fail('V03', 'The Brain did not answer. Check the USB cable and that the Brain is on, then try again.');
   },
   async _streaming(w, ms = 400) { const n = w.lines; await sleep(ms); return w.lines > n; },
 
@@ -124,7 +127,8 @@ export const vex = {
   // Open + classify one port, then connect if we now have what we need.
   async add(port) {
     if (!this._open.has(port)) {
-      await port.open({ baudRate: 115200 });
+      try { await port.open({ baudRate: 115200 }); }
+      catch (e) { throw fail('V02', 'Could not open the port. Close VEXcode and any other tab using the Brain, then try again.'); }
       this._open.add(port);
       const w = this._wrap(port);
       if (await this._streaming(w)) this.user = w;                       // program already running
@@ -140,15 +144,16 @@ export const vex = {
       this._set('uploading');
       const ini = `[project]\nide=VEXcode\n[program]\nname=Byte to Bite\nslot=${SLOT - 1}\nicon=cool-x\niconalt=\ndescription=Controller link for the Byte to Bite website`;
       await this._uploadFile(`slot_${SLOT}.ini`, new TextEncoder().encode(ini), 0, 0);
-      await this._uploadFile(`slot_${SLOT}.bin`, await this.loadProgram(), LOAD_ADDR, 1);   // 1 = run it
-      this._set(await this._streaming(this.user, 1500) ? 'connected' : 'error: program did not start');
-    } catch (e) { this._set('error: ' + e.message); }
+      const program = await this.loadProgram().catch(() => { throw fail('V06', 'Could not download the controller program. Check your internet and reload the page.'); });
+      await this._uploadFile(`slot_${SLOT}.bin`, program, LOAD_ADDR, 1);   // 1 = run it
+      this._set(await this._streaming(this.user, 1500) ? 'connected' : 'error: V05: The program was sent but did not start. Turn the Brain off and on, then try again.');
+    } catch (e) { this._set('error: ' + coded(e)); }
   },
 
   // Button click: let the visitor pick a VEX port (they pick twice, once per port).
   async request() {
     try { await this.add(await navigator.serial.requestPort({ filters: [{ usbVendorId: VEX_USB_VENDOR }] })); }
-    catch (e) { if (e.name !== 'NotFoundError') this._set('error: ' + e.message); }   // NotFoundError = picker cancelled
+    catch (e) { if (e.name !== 'NotFoundError') this._set('error: ' + coded(e)); }   // NotFoundError = picker cancelled
   },
   // Page load: reuse ports the visitor already allowed.
   async resume() {

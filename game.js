@@ -602,10 +602,10 @@ addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updat
     prevA=s.a;prevB=s.b;
   };
   const btn=$('vexbtn'),msg=$('vexmsg');
-  const TEXT={'need-port':['Connect','Plug the EXP Brain in over USB'],'need-other-port':['Pick the other VEX port','The Brain has two ports. Pick the one you did not pick yet'],uploading:['Connecting…','Loading the controller program onto the Brain (slot 8)'],connected:['Connected','Left stick drives, A interacts, B restarts'],lost:['Reconnect','The Brain was unplugged']};
-  vex.onStatus=s=>{const t=TEXT[s]||['Try again',s.replace(/^error: /,'')];btn.textContent=t[0];msg.textContent=t[1];btn.disabled=s==='uploading'||s==='connected';};
+  const TEXT={'need-port':['Connect','Plug the EXP Brain in over USB'],'need-other-port':['Pick the other VEX port','The Brain has two ports. Pick the one you did not pick yet'],uploading:['Connecting…','Loading the controller program onto the Brain (slot 8)'],connected:['Connected','Left stick drives, A interacts, B restarts'],lost:['Reconnect','V07: The Brain was unplugged or turned off']};
+  vex.onStatus=s=>{const t=TEXT[s]||['Try again','Error '+s.replace(/^error: /,'')];btn.textContent=t[0];msg.textContent=t[1];btn.disabled=s==='uploading'||s==='connected';};
   if(vex.supported()){btn.onclick=()=>vex.request();vex.resume();}
-  else{btn.disabled=true;msg.textContent='Needs Chrome or Edge on a computer';}
+  else{btn.disabled=true;msg.textContent='V01: Needs Chrome or Edge on a computer';}
 }
 
 // Leaderboard on Supabase (REST). Score is client-reported, so it is honor-system.

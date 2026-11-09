@@ -22,3 +22,27 @@ assert.equal(parseLine('CTL,1,2,3'), null);
 assert.equal(parseLine('CTL,999,0,0,0,0,0,0,0,0,0,0,0,0,0'), null);
 assert.equal(parseLine('hello'), null);
 console.log('vex.test ok');
+
+// Error codes: a fake Brain that answers the ping but refuses the upload, then one that goes silent.
+import { vex } from '../vex.js';
+const fakePort = onCommand => {
+  let ctl;
+  return {
+    async open() {},
+    readable: new ReadableStream({ start(c) { ctl = c; } }),
+    writable: new WritableStream({ write(chunk) { const r = onCommand(chunk[5]); if (r) ctl.enqueue(r); } }),
+  };
+};
+const replyTo = (ecmd, ack) => { const b = [0xAA, 0x55, 0x56, 4, ecmd, ack], c = crc16(b); return Uint8Array.from([...b, c >> 8, c & 0xFF]); };
+vex.loadProgram = async () => new Uint8Array(8);
+let pingOnly = false;
+await vex.add(fakePort(ecmd => (ecmd === 0x20 ? replyTo(ecmd, 0x76) : pingOnly ? null : replyTo(ecmd, 0xD3))));   // system port
+assert.equal(vex.status, 'need-other-port');
+await vex.add(fakePort(() => null));                                                                              // silent user port
+assert.match(vex.status, /^error: V04-d3: /);
+pingOnly = true;
+await vex._go();
+assert.match(vex.status, /^error: V03: /);
+await vex.add({ open: async () => { throw new Error('busy'); } }).catch(e => assert.equal(e.code, 'V02'));
+console.log('vex error codes ok');
+process.exit(0);
