@@ -10,6 +10,7 @@ To see the code for any version, open the [`history` branch commits](https://git
 
 | Date | Update | Built with | Status |
 |---|---|---|---|
+| Nov 9 | **VEX EXP controller in the browser.** Settings has a Connect button: the page loads a small program into slot 8 of an EXP Brain over USB (Web Serial, Chrome/Edge) and reads the paired controller. Left stick drives, A interacts, B restarts. Replaces the old local Python bridge. | Claude Code | Live |
 | Nov 7 | Fix: RTX mode bloom threshold raised so the whole scene no longer glows white; the selected quality and frame-cap buttons in Settings now have a solid fill so the current choice is obvious. | Claude Code (Sonnet 5.5) | Live |
 | Nov 7 | RTX mode (Settings checkbox, off by default): ambient occlusion, bloom, 4096 shadow maps and full-resolution rendering. It is a ray-traced look built with post-processing, not real ray tracing, and it turns Auto quality off while it is on. Needs a strong GPU. | Claude Code (Sonnet 5.5) | Live |
 | Nov 6 | Lower GPU use: frame rate cap (30/60/Max, default 60), no drawing behind the start menu or results screen, 15 fps when the window is unfocused, shadows refreshed every other frame, Auto graphics quality (new default), High capped at 1.5x resolution. FPS counter now shows rendered frames. | Claude Code (Sonnet 5.5) | Live |

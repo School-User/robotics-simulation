@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { vex } from './vex.js';
 
 const $ = id => document.getElementById(id);
 const renderer = new THREE.WebGLRenderer({ antialias:true });
@@ -587,31 +588,25 @@ if(!draw)return;
 } tick();
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);rtx?.setSize(innerWidth,innerHeight);});
 
-// VEX controller bridge: maps live joystick/button state (from controller_bridge.py)
-// onto the same `keys` object used by keyboard input, so all existing driving/
-// interact/restart logic is reused as-is.
-(function(){
-  const DEADZONE=20;
-  let prevA=0, prevB=0;
-  function connect(){
-    const ws=new WebSocket('ws://localhost:8765');
-    ws.onmessage=e=>{
-      const s=JSON.parse(e.data);
-      if(s.ly>DEADZONE){keys.KeyW=true;keys.KeyS=false;}
-      else if(s.ly<-DEADZONE){keys.KeyS=true;keys.KeyW=false;}
-      else{keys.KeyW=false;keys.KeyS=false;}
-      if(s.rx>DEADZONE){keys.KeyD=true;keys.KeyA=false;}
-      else if(s.rx<-DEADZONE){keys.KeyA=true;keys.KeyD=false;}
-      else{keys.KeyA=false;keys.KeyD=false;}
-      if(s.a&&!prevA&&ready&&!state.ended){const c=objectCandidates()[0];if(c)act(c);}
-      if(s.b&&!prevB)restart();
-      prevA=s.a;prevB=s.b;
-    };
-    ws.onclose=()=>setTimeout(connect,2000);
-    ws.onerror=()=>ws.close();
-  }
-  connect();
-})();
+// VEX EXP controller over Web Serial (vex.js): maps the live sticks/buttons onto the same `keys`
+// object the keyboard uses, so driving/interact/restart logic is reused as-is.
+{
+  const DEADZONE=20; // ponytail: fixed stick deadzone in percent; make it a setting if controllers drift past it
+  let prevA=0,prevB=0,wasActive=false;
+  vex.onState=s=>{
+    const f=s.ly>DEADZONE,b=s.ly<-DEADZONE,turn=Math.abs(s.lx)>Math.abs(s.rx)?s.lx:s.rx,l=turn<-DEADZONE,r=turn>DEADZONE;
+    if(f||b||l||r||wasActive){keys.KeyW=f;keys.KeyS=b;keys.KeyA=l;keys.KeyD=r;} // only touch keys while the sticks are (or just were) in use, so the keyboard still works
+    wasActive=f||b||l||r;
+    if(s.a&&!prevA&&ready&&!state.ended){const c=objectCandidates()[0];if(c)act(c);}
+    if(s.b&&!prevB)restart();
+    prevA=s.a;prevB=s.b;
+  };
+  const btn=$('vexbtn'),msg=$('vexmsg');
+  const TEXT={'need-port':['Connect','Plug the EXP Brain in over USB'],'need-other-port':['Pick the other VEX port','The Brain has two ports. Pick the one you did not pick yet'],uploading:['Connecting…','Loading the controller program onto the Brain (slot 8)'],connected:['Connected','Left stick drives, A interacts, B restarts'],lost:['Reconnect','The Brain was unplugged']};
+  vex.onStatus=s=>{const t=TEXT[s]||['Try again',s.replace(/^error: /,'')];btn.textContent=t[0];msg.textContent=t[1];btn.disabled=s==='uploading'||s==='connected';};
+  if(vex.supported()){btn.onclick=()=>vex.request();vex.resume();}
+  else{btn.disabled=true;msg.textContent='Needs Chrome or Edge on a computer';}
+}
 
 // Leaderboard on Supabase (REST). Score is client-reported, so it is honor-system.
 const sb=(p,o={})=>fetch(SUPABASE_URL+'/rest/v1/'+p,{...o,headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY,'Content-Type':'application/json',Prefer:'return=minimal'}});
